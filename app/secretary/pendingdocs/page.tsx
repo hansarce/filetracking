@@ -37,6 +37,7 @@ export type DocData = {
   subject: string;
   dateOfDocument: string;
   deadline: string;
+  startDate: string;
   fsisReferenceNumber: string;
   originatingOffice: string;
   forwardedBy: string;
@@ -56,23 +57,37 @@ export default function PendingDocs() {
   const [isHoldMode, setIsHoldMode] = useState(false);
   const [assignedInspector, setAssignedInspector] = useState("");
   const [inspectors, setInspectors] = useState<string[]>([]);
+  const [isReturnedMode, setIsReturnedMode] = useState(false);
+  const [returnRemarks, setReturnRemarks] = useState("");
+  const [unreadDocs, setUnreadDocs] = useState<Set<string>>(new Set());
+  const [lastVisit, setLastVisit] = useState<Date | null>(null);
 
   useEffect(() => {
+    // Load last visit time from localStorage or set current time if first visit
+      const storedLastVisit = localStorage.getItem('lastVisit');
+  const currentLastVisit = storedLastVisit ? new Date(storedLastVisit) : new Date();
+  
+  if (!storedLastVisit) {
+    localStorage.setItem('lastVisit', currentLastVisit.toISOString());
+  }
     const docsRef = ref(database, "documents");
     const unsubscribe = onValue(docsRef, (snapshot) => {
       try {
         if (snapshot.exists()) {
           const fetchedDocs: DocData[] = [];
+          const newUnreadDocs = new Set<string>();
+          
           snapshot.forEach((childSnapshot) => {
             const doc = childSnapshot.val();
             if (doc.forwardedTo === "Secretary" && doc.status === "Open") {
-              fetchedDocs.push({
+              const docData: DocData = {
                 id: childSnapshot.key,
                 awdReceivedDate: doc.awdReceivedDate || "",
                 awdReferenceNumber: doc.awdReferenceNumber || "",
                 subject: doc.subject || "",
                 dateOfDocument: doc.dateOfDocument || "",
                 deadline: doc.deadline || "",
+                startDate: doc.startDate || doc.awdReceivedDate || new Date().toISOString(),
                 fsisReferenceNumber: doc.fsisReferenceNumber || "",
                 originatingOffice: doc.originatingOffice || "",
                 forwardedBy: doc.forwardedBy || "",
@@ -82,9 +97,21 @@ export default function PendingDocs() {
                 workingDays: doc.workingDays || "",
                 dateTimeSubmitted: doc.dateTimeSubmitted || new Date().toISOString(),
                 assignedInspector: doc.assignedInspector || ""
-              });
+              };
+              
+              fetchedDocs.push(docData);
+              
+              // Check if document is new since last visit
+              if (currentLastVisit && docData.dateTimeSubmitted) {
+      const docDate = new Date(docData.dateTimeSubmitted);
+      if (docDate > currentLastVisit) {
+        newUnreadDocs.add(childSnapshot.key);
+      }
+    }
             }
           });
+          
+          setUnreadDocs(newUnreadDocs);
           setDocuments(fetchedDocs);
         } else {
           setDocuments([]);
@@ -106,8 +133,55 @@ export default function PendingDocs() {
           setInspectors(fetchedInspectors);
         } else {
           setInspectors([
-            "BOCALBOS, EDGARDO S",
-            // ... rest of the inspector list
+             "BOCALBOS, EDGARDO S",
+              "JIMENEZ, CESAR S. JR.",
+              "BRIONES, RODERICK D.",
+              "PAGTULIGAN, ANDRES P.",
+              "ARMENIO, JUDY O.",
+              "DELIMA, JORGE A.",
+              "COMIA, WILFREDO B.",
+              "DALISAY, HERNAN I",
+              "DORADO, ROGER R.",
+              "ESTELLERO, RAMON R.",
+              "IBAÑEZ, DENNISE LEAH BRENDA T.",
+              "DADIS, YASMIN S.",
+              "NICDAO, LINO L.",
+              "ENGR. ECHAVEZ, IAN W.",
+              "ALFORQUE, RICHIE E.",
+              "ALVAREZ, FERNANDO R.",
+              "CUMIGAD, JOHN C. JR.",
+              "FLORES, ALFIN G.",
+              "JOHN MICHAEL REY",
+              "MALVEDA, MARY GRACE D.",
+              "SANDOVAL, DENNIS MORREL M.",
+              "BAGASBAS, JOURVIE A.",
+              "TUMANUT, ALDEN",
+              "ENGR. LEONARD M. VILLAR",
+              "MANUEL, MICHAEL",
+              "CRUZ, ROGELIO GINO S.",
+              "ANG, ALEXIS F.",
+              "DE GUZMAN, GILBERT B.",
+              "EVANGELISTA, SERLIND",
+              "BANTING, RHAMCEL CYRUS DC",
+              "BATHAN, RODA C.",
+              "BUIT, SAHARA THERESA H.",
+              "RADA, JUVI ELVA MAYE B",
+              "LAIG, RAPHAEL D.",
+              "NICDAO, LINO L.",
+              "DE ARCA, REY ANTHONY D",
+              "JARMIN, FELIX T",
+              "NARA, ALIMBEN P.",
+              "ALCANTARA, JENNY T.",
+              "APAO, AYMER M.",
+              "CAALIM, MARION KRISTIAN G.",
+              "CUSI, LUCAS A. JR.",
+              "RAMIEZ, RONALD JOHN M.",
+              "LASMARIAS, CARLOS F. JR.",
+              "GARCIA, ALLAN G.",
+              "RODA, ALDINO G.",
+              "BUYA, BENEDICTO JOSE J.",
+              "VILLAVIEJA, ADOLFO JR."
+                        
           ]);
         }
       } catch (error) {
@@ -115,31 +189,41 @@ export default function PendingDocs() {
       }
     });
 
-    return () => {
+   return () => {
       unsubscribe();
       inspectorsUnsubscribe();
     };
   }, []);
 
-  const calculateWorkingDays = (deadline: string): number => {
-    if (!deadline) return 0;
-    const deadlineDate = new Date(deadline);
-    const today = new Date();
+  const calculateWorkingDays = (startDate: string, deadline: string): number => {
+  if (!startDate || !deadline) return 0;
+  const start = new Date(startDate);
+  const end = new Date(deadline);
+  const today = new Date();
 
-    if (deadlineDate < today) return -1;
+  if (end < today) return -1;
 
-    let workingDays = 0;
-    const currentDate = new Date(today);
-    currentDate.setHours(0, 0, 0, 0);
+  let workingDays = 0;
+  const currentDate = new Date(start);
+  currentDate.setHours(0, 0, 0, 0);
+  end.setHours(0, 0, 0, 0);
 
-    while (currentDate <= deadlineDate) {
-      const dayOfWeek = currentDate.getDay();
-      if (dayOfWeek !== 0 && dayOfWeek !== 6) workingDays++;
-      currentDate.setDate(currentDate.getDate() + 1);
+  // Adjust to not count the start date if it's the same as end date
+  if (currentDate.getTime() === end.getTime()) {
+    const dayOfWeek = currentDate.getDay();
+    return (dayOfWeek !== 0 && dayOfWeek !== 6) ? 1 : 0;
+  }
+
+  while (currentDate <= end) {
+    const dayOfWeek = currentDate.getDay();
+    if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+      workingDays++;
     }
+    currentDate.setDate(currentDate.getDate() + 1);
+  }
 
-    return workingDays;
-  };
+  return workingDays;
+};
 
   const getCurrentDateTime = () => {
     const now = new Date();
@@ -153,135 +237,149 @@ export default function PendingDocs() {
     }).replace(",", "");
   };
 
-  const handleProcessDocument = async () => {
-    if (!selectedDoc || !forwardTo) return;
-    try {
-      const userUID = localStorage.getItem("authToken");
-      if (!userUID) {
-        alert("User not authenticated.");
-        return;
-      }
-
-      let userName, userDivision;
-      const userRef = ref(database, `accounts/${userUID}`);
-      await new Promise((resolve) => {
-        const userUnsubscribe = onValue(userRef, (userSnapshot) => {
-          userUnsubscribe();
-          if (userSnapshot.exists()) {
-            const userData = userSnapshot.val();
-            userName = userData.name;
-            userDivision = userData.division;
-          } else {
-            alert("User details not found in the database.");
-          }
-          resolve(null);
-        }, { onlyOnce: true });
-      });
-
-      if (!userName || !userDivision) return;
-
-      const forwardedBy = `${userName} (${userDivision})`;
-      const dateTimeSubmitted = getCurrentDateTime();
-
-      const docRef = ref(database, `documents/${selectedDoc.id}`);
-      await update(docRef, {
-        forwardedBy,
-        forwardedTo: forwardTo,
-        awdReceivedDate: selectedDoc.awdReceivedDate,
-        awdReferenceNumber: selectedDoc.awdReferenceNumber,
-        subject: selectedDoc.subject,
-        dateOfDocument: selectedDoc.dateOfDocument,
-        deadline: selectedDoc.deadline,
-        fsisReferenceNumber: selectedDoc.fsisReferenceNumber,
-        originatingOffice: selectedDoc.originatingOffice,
-        remarks: "FAA",
-        status: "Open",
-        workingDays: selectedDoc.workingDays,
-        assignedInspector: selectedDoc.assignedInspector || ""
-      });
-
-      const trackingRef = ref(database, `tracking/${selectedDoc.id}`);
-      await push(trackingRef, {
-        ...selectedDoc,
-        forwardedBy,
-        forwardedTo: forwardTo,
-        remarks: "FAA",
-        dateTimeSubmitted
-      });
-
-      setSelectedDoc(null);
-      setForwardTo("");
-      alert("Document successfully forwarded!");
-    } catch (error) {
-      console.error("Error processing document:", error);
+ const handleProcessDocument = async () => {
+  if (!selectedDoc || !forwardTo) return;
+  try {
+    const userUID = localStorage.getItem("authToken");
+    if (!userUID) {
+      alert("User not authenticated.");
+      return;
     }
-  };
+
+    let userName, userDivision;
+    const userRef = ref(database, `accounts/${userUID}`);
+    await new Promise((resolve) => {
+      const userUnsubscribe = onValue(userRef, (userSnapshot) => {
+        userUnsubscribe();
+        if (userSnapshot.exists()) {
+          const userData = userSnapshot.val();
+          userName = userData.name;
+          userDivision = userData.division;
+        } else {
+          alert("User details not found in the database.");
+        }
+        resolve(null);
+      }, { onlyOnce: true });
+    });
+
+    if (!userName || !userDivision) return;
+
+    const forwardedBy = `${userName} (${userDivision})`;
+    const dateTimeSubmitted = getCurrentDateTime();
+
+    // Update the main document
+    const docRef = ref(database, `documents/${selectedDoc.id}`);
+    await update(docRef, {
+      forwardedBy,
+      forwardedTo: forwardTo,
+      awdReceivedDate: selectedDoc.awdReceivedDate,
+      awdReferenceNumber: selectedDoc.awdReferenceNumber,
+      subject: selectedDoc.subject,
+      dateOfDocument: selectedDoc.dateOfDocument,
+      deadline: selectedDoc.deadline,
+      startDate: selectedDoc.startDate,
+      fsisReferenceNumber: selectedDoc.fsisReferenceNumber,
+      originatingOffice: selectedDoc.originatingOffice,
+      remarks: "FAA",
+      status: "Open",
+      workingDays: calculateWorkingDays(selectedDoc.startDate, selectedDoc.deadline),
+      assignedInspector: selectedDoc.assignedInspector || ""
+    });
+
+    // Create a flat tracking entry at root level
+    const trackingRef = ref(database, "tracking");
+    const newTrackingEntry = {
+      action: "Forwarded",
+      forwardedBy,
+      forwardedTo: forwardTo,
+      remarks: "FAA",
+      status: "Open",
+      dateTimeSubmitted,
+      actionTimestamp: Date.now(), // For sorting
+      // Include essential document info for reference
+      awdReferenceNumber: selectedDoc.awdReferenceNumber,
+      subject: selectedDoc.subject,
+      originatingOffice: selectedDoc.originatingOffice
+    };
+    
+    await push(trackingRef, newTrackingEntry);
+
+    setSelectedDoc(null);
+    setForwardTo("");
+    alert("Document successfully forwarded!");
+  } catch (error) {
+    console.error("Error processing document:", error);
+  }
+};
+ 
 
   const handleReturnDocument = async () => {
-    if (!selectedDoc) return;
+  if (!selectedDoc) return;
 
-    try {
-      const userUID = localStorage.getItem("authToken");
-      if (!userUID) {
-        alert("User not authenticated.");
-        return;
-      }
-
-      let userName, userDivision;
-      const userRef = ref(database, `accounts/${userUID}`);
-      await new Promise((resolve) => {
-        const userUnsubscribe = onValue(userRef, (userSnapshot) => {
-          userUnsubscribe();
-          if (userSnapshot.exists()) {
-            const userData = userSnapshot.val();
-            userName = userData.name;
-            userDivision = userData.division;
-          } else {
-            alert("User details not found in the database.");
-          }
-          resolve(null);
-        }, { onlyOnce: true });
-      });
-
-      if (!userName || !userDivision) return;
-
-      const forwardedBy = `${userName} (${userDivision})`;
-      const dateTimeSubmitted = getCurrentDateTime();
-
-      const docRef = ref(database, `documents/${selectedDoc.id}`);
-      await update(docRef, {
-        forwardedBy: "Secretary",
-        forwardedTo: "FSIS",
-        remarks: "Returned",
-        status: "Returned",
-        // Include all other fields
-        awdReceivedDate: selectedDoc.awdReceivedDate,
-        awdReferenceNumber: selectedDoc.awdReferenceNumber,
-        subject: selectedDoc.subject,
-        dateOfDocument: selectedDoc.dateOfDocument,
-        deadline: selectedDoc.deadline,
-        fsisReferenceNumber: selectedDoc.fsisReferenceNumber,
-        originatingOffice: selectedDoc.originatingOffice,
-        workingDays: selectedDoc.workingDays,
-        assignedInspector: selectedDoc.assignedInspector || ""
-      });
-
-      const trackingRef = ref(database, `tracking/${selectedDoc.id}`);
-      await push(trackingRef, {
-        ...selectedDoc,
-        forwardedBy,
-        forwardedTo: "FSIS",
-        remarks: "Returned",
-        status: "Returned",
-        dateTimeSubmitted
-      });
-
-      setSelectedDoc(null);
-      alert("Document successfully returned!");
-    } catch (error) {
-      console.error("Error returning document:", error);
+  try {
+    const userUID = localStorage.getItem("authToken");
+    if (!userUID) {
+      alert("User not authenticated.");
+      return;
     }
-  };
+
+    let userName, userDivision;
+    const userRef = ref(database, `accounts/${userUID}`);
+    await new Promise((resolve) => {
+      const userUnsubscribe = onValue(userRef, (userSnapshot) => {
+        userUnsubscribe();
+        if (userSnapshot.exists()) {
+          const userData = userSnapshot.val();
+          userName = userData.name;
+          userDivision = userData.division;
+        } else {
+          alert("User details not found in the database.");
+        }
+        resolve(null);
+      }, { onlyOnce: true });
+    });
+
+    if (!userName || !userDivision) return;
+
+    const forwardedBy = `${userName} (${userDivision})`;
+    const dateTimeSubmitted = getCurrentDateTime();
+
+    const docRef = ref(database, `documents/${selectedDoc.id}`);
+    await update(docRef, {
+      forwardedBy: "Secretary",
+      forwardedTo: "FSIS",
+      remarks: returnRemarks || "Returned", // Use custom remarks if provided
+      status: "Returned",
+      awdReceivedDate: selectedDoc.awdReceivedDate,
+      awdReferenceNumber: selectedDoc.awdReferenceNumber,
+      subject: selectedDoc.subject,
+      dateOfDocument: selectedDoc.dateOfDocument,
+      deadline: selectedDoc.deadline,
+      startDate: selectedDoc.startDate,
+      fsisReferenceNumber: selectedDoc.fsisReferenceNumber,
+      originatingOffice: selectedDoc.originatingOffice,
+      workingDays: calculateWorkingDays(selectedDoc.startDate, selectedDoc.deadline),
+      assignedInspector: selectedDoc.assignedInspector || ""
+    });
+
+    const trackingRef = ref(database, `tracking`);
+    await push(trackingRef, {
+      ...selectedDoc,
+      forwardedBy,
+      forwardedTo: "FSIS",
+      remarks: returnRemarks || "Returned", // Use custom remarks if provided
+      status: "Returned",
+      dateTimeSubmitted
+    });
+
+    setSelectedDoc(null);
+    setIsReturnedMode(false);
+    setReturnRemarks("");
+    alert("Document successfully returned!");
+  } catch (error) {
+    console.error("Error returning document:", error);
+  }
+};
 
   const handleHoldDocument = async () => {
     if (!selectedDoc || !assignedInspector) return;
@@ -318,17 +416,27 @@ export default function PendingDocs() {
         status: "On Hold",
         assignedInspector,
         remarks: `On Hold - Assigned to ${assignedInspector}`,
-        // Include all other fields
         awdReceivedDate: selectedDoc.awdReceivedDate,
         awdReferenceNumber: selectedDoc.awdReferenceNumber,
         subject: selectedDoc.subject,
         dateOfDocument: selectedDoc.dateOfDocument,
         deadline: selectedDoc.deadline,
+        startDate: selectedDoc.startDate,
         fsisReferenceNumber: selectedDoc.fsisReferenceNumber,
         originatingOffice: selectedDoc.originatingOffice,
         forwardedBy: selectedDoc.forwardedBy,
         forwardedTo: selectedDoc.forwardedTo,
-        workingDays: selectedDoc.workingDays
+        workingDays: calculateWorkingDays(selectedDoc.startDate, selectedDoc.deadline)
+      });
+
+      const trackingRef = ref(database, `tracking/${selectedDoc.id}`);
+      await push(trackingRef, {
+        ...selectedDoc,
+        forwardedBy: `${userName} (${userDivision})`,
+        forwardedTo: "On Hold",
+        remarks: `Assigned to ${assignedInspector}`,
+        status: "On Hold",
+        dateTimeSubmitted
       });
 
       setIsHoldMode(false);
@@ -340,8 +448,8 @@ export default function PendingDocs() {
     }
   };
 
-  const getDeadlineBadge = (deadline: string) => {
-    const workingDays = calculateWorkingDays(deadline);
+  const getDeadlineBadge = (startDate: string, deadline: string) => {
+    const workingDays = calculateWorkingDays(startDate, deadline);
 
     if (!deadline) {
       return { variant: "outline" as const, text: "No deadline", className: "" };
@@ -351,7 +459,7 @@ export default function PendingDocs() {
       return {
         variant: "destructive" as const,
         text: "Overdue",
-        className: "bg-black text-white"
+        className: "bg-red"
       };
     } else if (workingDays <= 3) {
       return {
@@ -363,19 +471,19 @@ export default function PendingDocs() {
       return {
         variant: "secondary" as const,
         text: `${workingDays} working days left`,
-        className: "bg-orange-400"
+        className: "bg-yellow"
       };
     } else if (workingDays <= 20) {
       return {
         variant: "default" as const,
         text: `${workingDays} working days left`,
-        className: "bg-green-500"
+        className: "bg-green"
       };
     } else {
       return {
         variant: "default" as const,
         text: `${workingDays} working days left`,
-        className: ""
+        className: "bg-grey"
       };
     }
   };
@@ -389,11 +497,25 @@ export default function PendingDocs() {
       (doc.remarks && doc.remarks.toLowerCase().includes(searchTerm))
     );
   });
+
+  const handleDocClick = (doc: DocData) => {
+    setSelectedDoc(doc);
+    setIsHoldMode(false);
+    
+    // Mark document as read by removing from unread set
+    if (doc.id && unreadDocs.has(doc.id)) {
+      const newUnreadDocs = new Set(unreadDocs);
+      newUnreadDocs.delete(doc.id);
+      setUnreadDocs(newUnreadDocs);
+    }
+  };
+
+
   return (
     <ProtectedRoute allowedDivisions={['secretary']}>
       <SidebarProvider>
         <div className="flex h-screen">
-          <AppSidebarSecretary />
+         <AppSidebarSecretary pendingCount={filteredDocuments.length} />
           <SidebarInset className="flex flex-1 flex-col">
             <header className="flex h-16 items-center gap-2 border-b px-4 bg-white">
               <SidebarTrigger className="-ml-1" />
@@ -423,12 +545,10 @@ export default function PendingDocs() {
                 />
               </div>
 
-              {/* Document Count */}
               <p className="mb-4 text-gray-600">
                 Showing {filteredDocuments.length} of {documents.length} documents
               </p>
 
-              {/* Document Table */}
               <div className="overflow-x-auto">
                 <Table className="border w-full table-fixed">
                   <TableHeader>
@@ -444,25 +564,30 @@ export default function PendingDocs() {
                   </TableHeader>
                   <TableBody>
                     {filteredDocuments.map((doc) => {
-                      const badgeProps = getDeadlineBadge(doc.deadline);
-
+                      const badgeProps = getDeadlineBadge(doc.startDate, doc.deadline);
+                      const isUnread = doc.id ? unreadDocs.has(doc.id) : false;
                       return (
                         <TableRow
                           key={doc.id}
                           onClick={() => {
+                            handleDocClick(doc)
                             setSelectedDoc(doc);
                             setIsHoldMode(false);
                           }}
                           className="cursor-pointer hover:bg-gray-100"
                         >
-                          <TableCell className="truncate">{doc.awdReceivedDate}</TableCell>
+                          <TableCell className="relative">
+                            {isUnread && (
+                              <span className="absolute left-2 top-1/2 transform -translate-y-1/2 w-2 h-2 bg-blue-500 rounded-full"></span>
+                            )}
+                            {doc.awdReceivedDate}
+                          </TableCell>
                           <TableCell className="truncate">{doc.awdReferenceNumber}</TableCell>
                           <TableCell className="truncate">{doc.subject}</TableCell>
                           <TableCell className="truncate">{doc.forwardedBy}</TableCell>
                           <TableCell className="truncate">{doc.forwardedTo}</TableCell>
                           <TableCell>
                             <div className="flex flex-col gap-1">
-
                               <Badge
                                 variant={badgeProps.variant}
                                 className={badgeProps.className}
@@ -479,7 +604,6 @@ export default function PendingDocs() {
                 </Table>
               </div>
 
-              {/* Document Details and Actions */}
               {selectedDoc && !isHoldMode && (
                 <div className="mt-6 p-6 border rounded-lg shadow-lg bg-white max-w-2xl mx-auto">
                   <h2 className="text-2xl font-bold mb-4">Document Details</h2>
@@ -488,21 +612,19 @@ export default function PendingDocs() {
                     <p className="text-lg"><strong>AWD No.:</strong> {selectedDoc.awdReferenceNumber}</p>
                     <p className="text-lg"><strong>Date of Document:</strong> {selectedDoc.dateOfDocument}</p>
                     <p className="text-lg"><strong>Forwarded By:</strong> {selectedDoc.forwardedBy}</p>
-                    <p className="text-lg"><strong>Deadline:</strong> {selectedDoc.deadline}</p>
                     <div className="flex items-center gap-2">
                       <strong>Status:</strong>
                       <Badge
-                        variant={getDeadlineBadge(selectedDoc.deadline).variant}
-                        className={getDeadlineBadge(selectedDoc.deadline).className}
+                        variant={getDeadlineBadge(selectedDoc.startDate, selectedDoc.deadline).variant}
+                        className={getDeadlineBadge(selectedDoc.startDate, selectedDoc.deadline).className}
                       >
-                        {getDeadlineBadge(selectedDoc.deadline).text}
+                        {getDeadlineBadge(selectedDoc.startDate, selectedDoc.deadline).text}
                       </Badge>
                     </div>
-                    <p className="text-lg"><strong>Working Days Left:</strong> {calculateWorkingDays(selectedDoc.deadline)}</p>
+                    <p className="text-lg"><strong>Working Days Left:</strong> {calculateWorkingDays(selectedDoc.startDate, selectedDoc.deadline)}</p>
                     <p className="text-lg"><strong>Remarks:</strong> {selectedDoc.remarks}</p>
                   </div>
 
-                  {/* Forward Selection */}
                   <div className="mt-6">
                     <label className="block text-lg font-semibold mb-2">Forward To:</label>
                     <select
@@ -511,7 +633,7 @@ export default function PendingDocs() {
                       className="w-full p-2 border rounded-md text-lg"
                     >
                       <option value="" disabled>Select an Admin</option>
-                      {["CATCID Admin", "GACID Admin", "EARD Admin", "MOOCSU Admin", "Admin"].map((admin, index) => (
+                      {["CATCID Admin", "GACID Admin", "EARD Admin", "MOCSU Admin", "Admin"].map((admin, index) => (
                         <option key={index} value={admin}>{admin}</option>
                       ))}
                     </select>
@@ -519,23 +641,22 @@ export default function PendingDocs() {
 
                   <div className="mt-6 space-y-4">
                     <div className="grid grid-cols-2 gap-4">
-
                       <Button
                         className="w-full bg-orange-500 hover:bg-orange-600"
                         onClick={() => setIsHoldMode(true)}
                       >
                         Hold Document
                       </Button>
-
-
                       <Button
                         className="w-full bg-red-600 hover:bg-red-700"
-                        onClick={()=> setIsHoldMode(true) }
+                        onClick={() => {
+                        setIsReturnedMode(true);
+                        setIsHoldMode(false);
+                        
+                      }}
                       >
                         Return Document
                       </Button>
-
-
                     </div>
                     <Button
                       className="w-full bg-blue-600 hover:bg-blue-700"
@@ -547,9 +668,47 @@ export default function PendingDocs() {
                   </div>
                 </div>
               )}
-              
+                           
+                {selectedDoc && isReturnedMode && (
+                  <div className="mt-6 p-6 border rounded-lg shadow-lg bg-white max-w-2xl mx-auto">
+                    <h2 className="text-2xl font-bold mb-4">Return Document</h2>
+                    <div className="grid grid-cols-1 gap-3">
+                      <p className="text-lg"><strong>Subject:</strong> {selectedDoc.subject}</p>
+                      <p className="text-lg"><strong>AWD No.:</strong> {selectedDoc.awdReferenceNumber}</p>
+                    </div>
 
-              {/* Hold Mode Interface */}
+                    <div className="mt-6">
+                      <label className="block text-lg font-semibold mb-2">Return Remarks:</label>
+                      <textarea
+                        value={returnRemarks}
+                        onChange={(e) => setReturnRemarks(e.target.value)}
+                        placeholder="Enter reason for returning..."
+                        className="w-full p-2 border rounded-md text-lg min-h-[100px]"
+                      />
+                    </div>
+
+                    <div className="mt-6 space-y-4">
+                      <Button
+                        className="w-full bg-red-600 hover:bg-red-700"
+                        onClick={handleReturnDocument}
+                        disabled={!returnRemarks}
+                      >
+                        Confirm Return
+                      </Button>
+
+                      <Button
+                        className="w-full bg-gray-400 hover:bg-gray-500"
+                        onClick={() => {
+                          setIsReturnedMode(false);
+                          setReturnRemarks("");
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              
               {selectedDoc && isHoldMode && (
                 <div className="mt-6 p-6 border rounded-lg shadow-lg bg-white max-w-2xl mx-auto">
                   <h2 className="text-2xl font-bold mb-4">Hold Document</h2>

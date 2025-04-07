@@ -44,6 +44,7 @@ export type docudata = {
   awdrefnu: string;
   subject: string;
   workingDays: string;
+  startDate?: string;
   endDate?: string;
 };
 
@@ -68,6 +69,7 @@ const fetchDocuments = (setDocuments: React.Dispatch<React.SetStateAction<docuda
             awdrefnu: awdRefNum,
             subject: value.subject || "N/A",
             workingDays: value.workingDays || "N/A",
+            startDate: value.startDate || value.dateTimeSubmitted || "N/A", // Use startDate if available
             endDate: value.endDate || undefined
           });
         }
@@ -90,15 +92,17 @@ const fetchDocuments = (setDocuments: React.Dispatch<React.SetStateAction<docuda
   });
 };
 
-const getDeadlineStatus = (dateTimeSubmitted: string, workingDays: string, endDate?: string) => {
+const getDeadlineStatus = (startDate: string, workingDays: string, endDate?: string) => {
   if (endDate) return { status: "Closed", color: "gray" };
+  if (!startDate || startDate === "N/A") return { status: "N/A", color: "gray" };
   
   const daysToAdd = parseInt(workingDays) || 0;
-  const deadlineDate = new Date(dateTimeSubmitted);
+  const deadlineDate = new Date(startDate);
   deadlineDate.setDate(deadlineDate.getDate() + daysToAdd);
   
   const diff = Math.ceil((deadlineDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
   
+  if (diff <= 0) return { status: "Overdue", color: "red" };
   if (diff <= 3) return { status: `${diff} day(s) left`, color: "red" };
   if (diff <= 7) return { status: `${diff} day(s) left`, color: "yellow" };
   if (diff <= 20) return { status: `${diff} day(s) left`, color: "green" };
@@ -184,6 +188,8 @@ export default function SentDocs() {
     return updates;
   };
 
+  
+
   return (
     <ProtectedRoute allowedDivisions={['admin']}>
       <SidebarProvider>
@@ -228,14 +234,14 @@ export default function SentDocs() {
                       <TableHead className="min-w-[180px]">Date and Time</TableHead>
                       <TableHead className="min-w-[150px]">AWD No.</TableHead>
                       <TableHead className="min-w-[250px]">Subject</TableHead>
-                      <TableHead className="min-w-[150px]">Status</TableHead>
+                      <TableHead className="min-w-[150px]">Deadline Status</TableHead>
                       <TableHead className="min-w-[100px]">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {currentItems.length ? (
                       currentItems.map((doc) => {
-                        const deadline = getDeadlineStatus(doc.datetime, doc.workingDays, doc.endDate);
+                        const deadline = getDeadlineStatus(doc.startDate || doc.datetime, doc.workingDays, doc.endDate);
                         return (
                           <TableRow
                             key={doc.id}

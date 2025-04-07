@@ -45,6 +45,7 @@ interface DocumentData {
   status: string;
   workingDays: string;
   dateTimeSubmitted: string;
+  startDate?: string; // Added this field
   forwardedBy?: string;
   forwardedTo?: string;
   remarks?: string;
@@ -77,6 +78,7 @@ export default function OngoingDocuments() {
               status: doc.status || "N/A",
               workingDays: doc.workingDays || "0",
               dateTimeSubmitted: doc.dateTimeSubmitted || doc.awdReceivedDate || "N/A",
+              startDate: doc.startDate || doc.dateTimeSubmitted || "N/A", // Use startDate if available, fallback to dateTimeSubmitted
               forwardedBy: doc.forwardedBy,
               forwardedTo: doc.forwardedTo,
               remarks: doc.remarks
@@ -120,22 +122,99 @@ export default function OngoingDocuments() {
 
   const paginate = (pageNumber: number) => setCurrentPage(pageNumber);
 
-  const getDeadlineStatus = (date: string, days: string) => {
-    if (!date || date === "N/A") return { status: "N/A", color: "gray" };
-    
-    const daysNum = parseInt(days) || 0;
-    const deadline = new Date(date);
-    deadline.setDate(deadline.getDate() + daysNum);
-    
-    const diff = Math.ceil((deadline.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-    
-    if (diff <= 0) return { status: "Overdue", color: "red" };
-    if (diff <= 3) return { status: `${diff} day(s) left`, color: "red" };
-    if (diff <= 7) return { status: `${diff} day(s) left`, color: "yellow" };
-    if (diff <= 20) return { status: `${diff} day(s) left`, color: "green" };
-    return { status: `${diff} day(s) left`, color: "gray" };
+   // Improved getDeadlineStatus function
+const getDeadlineStatus = (startDate: string, workingDaysStr: string) => {
+  if (!startDate || startDate === "N/A" || !workingDaysStr) {
+    return { status: "N/A", color: "gray" };
+  }
+
+  const totalWorkingDays = parseInt(workingDaysStr) || 0;
+  if (totalWorkingDays <= 0) return { status: "No deadline", color: "gray" };
+
+  // Parse start date (handle both ISO and MM/DD/YYYY formats)
+  const parseDate = (dateStr: string) => {
+    if (dateStr.includes("/")) {
+      const [month, day, year] = dateStr.split("/");
+      return new Date(`${year}-${month}-${day}`);
+    }
+    return new Date(dateStr);
   };
 
+  const start = parseDate(startDate);
+  if (isNaN(start.getTime())) return { status: "Invalid date", color: "gray" };
+
+  // Calculate deadline date by adding working days (excluding weekends)
+  const calculateDeadline = (fromDate: Date, daysToAdd: number) => {
+    const result = new Date(fromDate);
+    let addedDays = 0;
+    
+    while (addedDays < daysToAdd) {
+      result.setDate(result.getDate() + 1);
+      if (result.getDay() !== 0 && result.getDay() !== 6) { // Skip weekends
+        addedDays++;
+      }
+    }
+    return result;
+  };
+
+  const deadline = calculateDeadline(start, totalWorkingDays);
+
+  // Calculate remaining working days between today and deadline
+  const calculateRemainingWorkingDays = (from: Date, to: Date) => {
+    let current = new Date(from);
+    current.setDate(current.getDate() + 1); // Start counting from tomorrow
+    let remainingDays = 0;
+    
+    while (current <= to) {
+      if (current.getDay() !== 0 && current.getDay() !== 6) { // Count only weekdays
+        remainingDays++;
+      }
+      current.setDate(current.getDate() + 1);
+    }
+    return remainingDays;
+  };
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0); // Normalize to start of day
+  deadline.setHours(23, 59, 59, 999); // Normalize to end of deadline day
+
+  if (today > deadline) {
+    return { status: "Overdue", color: "red" };
+  }
+
+  const remainingDays = calculateRemainingWorkingDays(today, deadline);
+
+  // Format the status text
+  const formatStatusText = (days: number, dueDate: Date) => {
+    const formattedDate = dueDate.toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric', 
+      year: 'numeric' 
+    });
+    
+    if (days === 0) {
+      return `Due today (${formattedDate})`;
+    }
+    return `${days} working day${days !== 1 ? 's' : ''} left (due ${formattedDate})`;
+  };
+
+  const statusText = formatStatusText(remainingDays, deadline);
+
+  // Determine color based on urgency
+  if (remainingDays === 0) return { status: statusText, color: "red" };
+  if (remainingDays <= 3) return { status: statusText, color: "red" };
+  if (remainingDays <= 7) return { status: statusText, color: "yellow" };
+  return { status: statusText, color: "green" };
+};
+
+// Helper function to format date as "MMM DD, YYYY"
+const formatDate = (date: Date) => {
+  return date.toLocaleDateString('en-US', { 
+    month: 'short', 
+    day: 'numeric', 
+    year: 'numeric' 
+  });
+};
   const handleEdit = (id: string) => {
     localStorage.setItem("selectedAwdRefNum", id);
     router.push("/admin/Documents/editaction");
@@ -210,7 +289,9 @@ export default function OngoingDocuments() {
                       <TableBody>
                         {currentItems.length > 0 ? (
                           currentItems.map((doc) => {
-                            const deadline = getDeadlineStatus(doc.dateTimeSubmitted, doc.workingDays);
+                            // Use startDate for deadline calculation if available, otherwise fallback to dateTimeSubmitted
+                            const deadlineDate = doc.startDate || doc.dateTimeSubmitted;
+                            const deadline = getDeadlineStatus(deadlineDate, doc.workingDays);
                             return (
                               <TableRow
                                 key={doc.id}

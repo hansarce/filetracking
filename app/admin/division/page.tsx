@@ -47,6 +47,7 @@ export type DocData = {
   assignedInspector: string;
   dateTimeSubmitted: string;
   endDate?: string;
+  startDate?: string; 
 };
 
 export default function DivisionDocs() {
@@ -58,29 +59,48 @@ export default function DivisionDocs() {
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(10); // You can adjust this number
+  const [itemsPerPage] = useState(10);
 
-  // List of admin divisions to filter
-  const divisionAdmins = [
-    "CATCID Admin", 
-    "GACID Admin", 
-    "EARD Admin", 
-    "MOCSU Admin"
-  ];
+  // List of admin divisions to filter (exact matches only)
+  const divisionAdmins = ["CATCID Admin", "GACID Admin", "EARD Admin", "MOCSU Admin"];
 
   useEffect(() => {
     const docsRef = ref(database, "documents");
     const unsubscribe = onValue(docsRef, (snapshot) => {
       try {
         if (snapshot.exists()) {
-          const fetchedDocs: DocData[] = [];
+         const fetchedDocs: DocData[] = [];
           snapshot.forEach((childSnapshot) => {
             const doc = childSnapshot.val();
-            // Filter documents where forwardedTo is one of the division admins
-            if (divisionAdmins.includes(doc.forwardedTo) && doc.status === "Open") {
-              fetchedDocs.push({ id: childSnapshot.key, ...doc });
+            if (
+              (doc.forwardedTo === "CATCID Admin" || 
+              doc.forwardedTo === "GACID Admin" || 
+              doc.forwardedTo === "EARD Admin" || 
+              doc.forwardedTo === "MOCSU Admin") && 
+              doc.status === "Open"
+            ) {
+              fetchedDocs.push({ 
+                id: childSnapshot.key, 
+                awdReceivedDate: doc.awdReceivedDate || "",
+                awdReferenceNumber: doc.awdReferenceNumber || "",
+                subject: doc.subject || "",
+                dateOfDocument: doc.dateOfDocument || "",
+                deadline: doc.deadline || "",
+                fsisReferenceNumber: doc.fsisReferenceNumber || "",
+                originatingOffice: doc.originatingOffice || "",
+                forwardedBy: doc.forwardedBy || "",
+                forwardedTo: doc.forwardedTo || "",
+                remarks: doc.remarks || "",
+                status: doc.status || "Open",
+                workingDays: doc.workingDays || "",
+                assignedInspector: doc.assignedInspector || "",
+                dateTimeSubmitted: doc.dateTimeSubmitted || new Date().toISOString(),
+                endDate: doc.endDate || "",
+                startDate: doc.startDate || doc.dateTimeSubmitted || new Date().toISOString() // Add this line
+              });
             }
           });
+
           setDocuments(fetchedDocs);
         } else {
           setDocuments([]);
@@ -90,12 +110,10 @@ export default function DivisionDocs() {
       }
     });
 
-    // Clean up the subscription on unmount
     return () => unsubscribe();
   }, []);
 
   useEffect(() => {
-    // Fetch inspectors from accounts with inspector role
     const accountsRef = ref(database, "accounts");
     const unsubscribe = onValue(accountsRef, (snapshot) => {
       if (snapshot.exists()) {
@@ -117,12 +135,16 @@ export default function DivisionDocs() {
   }, []);
 
   // Calculate pagination
-  const filteredDocuments = documents.filter(doc => 
-    doc.awdReferenceNumber.toLowerCase().includes(search.toLowerCase()) ||
-    doc.subject.toLowerCase().includes(search.toLowerCase()) ||
-    doc.forwardedBy.toLowerCase().includes(search.toLowerCase()) ||
-    doc.forwardedTo.toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredDocuments = documents.filter(doc => {
+    const searchTerm = search.toLowerCase();
+    return (
+      doc.awdReferenceNumber.toLowerCase().includes(searchTerm) ||
+      doc.subject.toLowerCase().includes(searchTerm) ||
+      (doc.forwardedBy && doc.forwardedBy.toLowerCase().includes(searchTerm)) ||
+      (doc.forwardedTo && doc.forwardedTo.toLowerCase().includes(searchTerm)) ||
+      (doc.remarks && doc.remarks.toLowerCase().includes(searchTerm))
+    );
+  });
 
   const indexOfLastItem = currentPage * itemsPerPage;
   const indexOfFirstItem = indexOfLastItem - itemsPerPage;
@@ -130,131 +152,129 @@ export default function DivisionDocs() {
   const totalPages = Math.ceil(filteredDocuments.length / itemsPerPage);
 
   const paginate = (pageNumber: number) => setCurrentPage(pageNumber);
-
-  const calculateWorkingDays = (startDate: string, endDate: Date): number => {
-    try {
-      const start = new Date(startDate);
-      const end = new Date(endDate);
-      
-      // Reset time parts to compare only dates
-      start.setHours(0, 0, 0, 0);
-      end.setHours(0, 0, 0, 0);
-      
-      let count = 0;
-      const current = new Date(start);
-      
-      while (current <= end) {
-        const dayOfWeek = current.getDay();
-        if (dayOfWeek !== 0 && dayOfWeek !== 6) { // Skip weekends
-          count++;
-        }
-        current.setDate(current.getDate() + 1);
+const calculateWorkingDays = (startDate: string, endDate: Date): number => {
+  try {
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    
+    start.setHours(0, 0, 0, 0);
+    end.setHours(0, 0, 0, 0);
+    
+    let count = 0;
+    const current = new Date(start);
+    
+    while (current <= end) {
+      const dayOfWeek = current.getDay();
+      if (dayOfWeek !== 0 && dayOfWeek !== 6) { // Skip weekends
+        count++;
       }
-      
-      return count;
-    } catch (error) {
-      console.error("Error calculating working days:", error);
-      return 0;
+      current.setDate(current.getDate() + 1);
     }
-  };
+    
+    return count;
+  } catch (error) {
+    console.error("Error calculating working days:", error);
+    return 0;
+  }
+};
 
   const handleForwardForRelease = async () => {
-    if (!selectedDoc || !assignedInspector) return;
-    
-    try {
-      const userUID = localStorage.getItem("authToken");
-      if (!userUID) {
-        alert("User not authenticated.");
-        return;
-      }
-
-      // Fetch user's name and division from Firebase
-      let userName, userDivision;
-      const userRef = ref(database, `accounts/${userUID}`);
-      
-      // Use get() instead of onValue for a one-time read
-      const userSnapshot = await get(userRef);
-      if (userSnapshot.exists()) {
-        const userData = userSnapshot.val();
-        userName = userData.name;
-        userDivision = userData.division;
-      } else {
-        alert("User details not found in the database.");
-        return;
-      }
-
-      const now = new Date();
-      const dateTimeSubmitted = now.toLocaleString("en-US", {
-        month: "2-digit",
-        day: "2-digit",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: true,
-      });
-
-      const formattedEndDate = now.toLocaleDateString("en-US", {
-        month: "2-digit",
-        day: "2-digit",
-        year: "numeric",
-      });
-
-      const calculatedWorkingDays = calculateWorkingDays(selectedDoc.dateTimeSubmitted, now);
-
-      // Update the original document
-      const docRef = ref(database, `documents/${selectedDoc.id}`);
-      await update(docRef, {
-        assignedInspector,
-        status: "Closed",
-        remarks: "For Release",
-        forwardedBy: selectedDoc.forwardedTo, // Set forwardedBy to the current division admin
-        forwardedTo: "Admin", // Forward to Admin
-        endDate: formattedEndDate,
-        workingDays: calculatedWorkingDays.toString(),
-      });
-
-      // Create tracking record
-      const trackingRef = ref(database, "tracking");
-      await push(trackingRef, {
-        id: selectedDoc.id,
-        awdReceivedDate: selectedDoc.awdReceivedDate,
-        awdReferenceNumber: selectedDoc.awdReferenceNumber,
-        subject: selectedDoc.subject,
-        dateOfDocument: selectedDoc.dateOfDocument,
-        deadline: selectedDoc.deadline,
-        fsisReferenceNumber: selectedDoc.fsisReferenceNumber,
-        originatingOffice: selectedDoc.originatingOffice,
-        forwardedBy: selectedDoc.forwardedTo, // Current division admin
-        forwardedTo: "Admin",
-        remarks: "For Release",
-        status: "Closed",
-        workingDays: calculatedWorkingDays.toString(),
-        assignedInspector,
-        dateTimeSubmitted,
-        endDate: formattedEndDate,
-      });
-      
-
-      // Store in mandays table
-      const mandaysRef = ref(database, "mandays");
-      await push(mandaysRef, {
-        awdReferenceNumber: selectedDoc.awdReferenceNumber,
-        originalWorkingDays: selectedDoc.workingDays,
-        actualWorkingDays: calculatedWorkingDays,
-        inspectorName: assignedInspector,
-        startDate: selectedDoc.dateTimeSubmitted,
-        endDate: formattedEndDate,
-        dateRecorded: now.toISOString(),
-      });
-
-      setSelectedDoc(null);
-      setAssignedInspector("");
-      alert("Document successfully forwarded for release!");
-    } catch (error) {
-      console.error("Error processing document:", error);
+  if (!selectedDoc || !assignedInspector) return;
+  
+  try {
+    const userUID = localStorage.getItem("authToken");
+    if (!userUID) {
+      alert("User not authenticated.");
+      return;
     }
-  };
 
+    let userName, userDivision;
+    const userRef = ref(database, `accounts/${userUID}`);
+    
+    const userSnapshot = await get(userRef);
+    if (userSnapshot.exists()) {
+      const userData = userSnapshot.val();
+      userName = userData.name;
+      userDivision = userData.division;
+    } else {
+      alert("User details not found in the database.");
+      return;
+    }
+
+    const now = new Date();
+    const dateTimeSubmitted = now.toLocaleString("en-US", {
+      month: "2-digit",
+      day: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    });
+
+    const formattedEndDate = now.toLocaleDateString("en-US", {
+      month: "2-digit",
+      day: "2-digit",
+      year: "numeric",
+    });
+
+    // Use startDate if available, fall back to dateTimeSubmitted
+    const startDateToUse = selectedDoc.startDate || selectedDoc.dateTimeSubmitted;
+    const calculatedWorkingDays = calculateWorkingDays(startDateToUse, now);
+
+    // Update the original document
+    const docRef = ref(database, `documents/${selectedDoc.id}`);
+    await update(docRef, {
+      assignedInspector,
+      status: "Closed",
+      remarks: "For Release",
+      forwardedBy: selectedDoc.forwardedTo,
+      forwardedTo: "Admin",
+      endDate: formattedEndDate,
+      workingDays: calculatedWorkingDays.toString(),
+      startDate: startDateToUse // Keep the startDate in the document
+    });
+
+    // Create tracking record
+    const trackingRef = ref(database, "tracking");
+    await push(trackingRef, {
+      id: selectedDoc.id,
+      awdReceivedDate: selectedDoc.awdReceivedDate,
+      awdReferenceNumber: selectedDoc.awdReferenceNumber,
+      subject: selectedDoc.subject,
+      dateOfDocument: selectedDoc.dateOfDocument,
+      deadline: selectedDoc.deadline,
+      fsisReferenceNumber: selectedDoc.fsisReferenceNumber,
+      originatingOffice: selectedDoc.originatingOffice,
+      forwardedBy: selectedDoc.forwardedTo,
+      forwardedTo: "Admin",
+      remarks: "For Release",
+      status: "Closed",
+      workingDays: calculatedWorkingDays.toString(),
+      assignedInspector,
+      dateTimeSubmitted,
+      endDate: formattedEndDate,
+      startDate: startDateToUse // Include startDate in tracking
+    });
+    
+    // Store in mandays table
+    const mandaysRef = ref(database, "mandays");
+    await push(mandaysRef, {
+      awdReferenceNumber: selectedDoc.awdReferenceNumber,
+      originalWorkingDays: selectedDoc.workingDays,
+      actualWorkingDays: calculatedWorkingDays,
+      inspectorName: assignedInspector,
+      startDate: startDateToUse, 
+      endDate: formattedEndDate,
+      dateRecorded: now.toISOString(),
+    });
+
+    setSelectedDoc(null);
+    setAssignedInspector("");
+    alert("Document successfully forwarded for release!");
+  } catch (error) {
+    console.error("Error processing document:", error);
+  }
+};
   return (
     <ProtectedRoute allowedDivisions={['admin']}>
     <SidebarProvider>
@@ -401,6 +421,7 @@ export default function DivisionDocs() {
                 </div>
 
                 {/* Assign Inspector */}
+               {/* Assign Inspector */}
                 <div className="mt-4">
                   <label className="block text-lg font-semibold mb-2">Assign Inspector:</label>
                   <Select onValueChange={(value) => setAssignedInspector(value)}>

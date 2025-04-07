@@ -129,7 +129,7 @@ export default function ReturnedDocuments() {
 
   const paginate = (pageNumber: number) => setCurrentPage(pageNumber);
 
-  const handleForwardToSecretary = async () => {
+ const handleForwardToSecretary = async () => {
   if (!selectedDoc) return;
 
   try {
@@ -141,12 +141,10 @@ export default function ReturnedDocuments() {
 
     // Fetch user's name and division from Firebase
     let userName, userDivision;
-
     const userRef = ref(database, `accounts/${userUID}`);
     await new Promise((resolve) => {
       const userUnsubscribe = onValue(userRef, (userSnapshot) => {
         userUnsubscribe();
-        
         if (userSnapshot.exists()) {
           const userData = userSnapshot.val();
           userName = userData.name;
@@ -158,13 +156,10 @@ export default function ReturnedDocuments() {
       }, { onlyOnce: true });
     });
 
-    if (!userName || !userDivision) {
-      return;
-    }
+    if (!userName || !userDivision) return;
 
     const forwardedBy = `${userName} (${userDivision})`;
     const forwardTo = "Secretary";
-
     const dateTimeSubmitted = new Date().toLocaleString("en-US", {
       month: "2-digit",
       day: "2-digit",
@@ -174,45 +169,36 @@ export default function ReturnedDocuments() {
       hour12: true,
     });
 
-    // Update the document in the "documents" table (unchanged)
+    // Update the document in the "documents" table
     const docRef = ref(database, `documents/${selectedDoc.id}`);
     await update(docRef, {
-      awdReceivedDate: selectedDoc.awdReceivedDate,
-      awdReferenceNumber: selectedDoc.awdReferenceNumber,
-      subject: selectedDoc.subject,
-      dateOfDocument: selectedDoc.dateOfDocument,
-      deadline: selectedDoc.deadline,
-      fsisReferenceNumber: selectedDoc.fsisReferenceNumber,
-      originatingOffice: selectedDoc.originatingOffice,
-      workingDays: selectedDoc.workingDays,
-      forwardedBy: forwardedBy,
+      ...selectedDoc, // Keep all existing fields
+      forwardedBy,
       forwardedTo: forwardTo,
       remarks: "Forwarded to Secretary",
       status: "Open",
       dateTimeSubmitted,
     });
 
-    // CHANGED: Push a new entry to the tracking table instead of updating
-    const trackingRef = ref(database, 'tracking');
-    const newTrackingRef = push(trackingRef);
-    
-    await push(newTrackingRef, {
-      id: selectedDoc.id,
-      awdReceivedDate: selectedDoc.awdReceivedDate,
-      awdReferenceNumber: selectedDoc.awdReferenceNumber,
-      subject: selectedDoc.subject,
-      dateOfDocument: selectedDoc.dateOfDocument,
-      deadline: selectedDoc.deadline,
-      fsisReferenceNumber: selectedDoc.fsisReferenceNumber,
-      originatingOffice: selectedDoc.originatingOffice,
-      workingDays: selectedDoc.workingDays,
-      forwardedBy: forwardedBy,
-      forwardedTo: forwardTo,
+    // Create a flat tracking entry with a unique ID
+    const trackingRef = ref(database, "tracking");
+    const newTrackingEntry = {
+      documentId: selectedDoc.id, // Reference to the original document
+      action: "Forwarded",
+      forwardedBy,
+      forwardedTo: "Secretary",
       remarks: "Forwarded to Secretary",
       status: "Open",
       dateTimeSubmitted,
-      actionTimestamp: Date.now() // Added timestamp for tracking
-    });
+      actionTimestamp: Date.now(),
+      // Include essential document info for easy reference
+      awdReferenceNumber: selectedDoc.awdReferenceNumber,
+      subject: selectedDoc.subject,
+      originatingOffice: selectedDoc.originatingOffice
+    };
+    
+    // Push creates a new entry with unique ID at the root level
+    await push(trackingRef, newTrackingEntry);
 
     setSelectedDoc(null);
     alert("Document successfully forwarded to Secretary!");
@@ -220,7 +206,6 @@ export default function ReturnedDocuments() {
     console.error("Error forwarding document:", error);
   }
 };
-
   return (
     <ProtectedRoute allowedDivisions={['admin']}>
       <SidebarProvider>

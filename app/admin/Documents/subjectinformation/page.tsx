@@ -129,40 +129,42 @@ export default function SubjectInformation() {
               ))}
             </div>
 
-            {/* Tracking Table */}
-            <div className="mt-12 flex justify-center px-8">
-              <div className="w-full max-w-5xl">
-                <h2 className="text-3xl font-semibold mb-6 text-center">Tracking History</h2>
-                {trackingData.length > 0 ? (
-                  <div className="overflow-x-auto">
-                    <table className="w-full border-collapse border border-gray-300 shadow-lg">
-                      <thead>
-                        <tr className="bg-gray-100">
-                          <th className="border px-6 py-3 text-left text-lg font-semibold">Date and Time </th>
-                          <th className="border px-6 py-3 text-left text-lg font-semibold">Forwarded By</th>
-                          <th className="border px-6 py-3 text-left text-lg font-semibold">Forwarded To</th>
-                          <th className="border px-6 py-3 text-left text-lg font-semibold">Status</th>
-                          <th className="border px-6 py-3 text-left text-lg font-semibold">Remarks</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {trackingData.map((entry, index) => (
-                          <tr key={index} className="border bg-white hover:bg-gray-50">
-                            <td className="border px-6 py-3 text-lg">{entry.dateTimeSubmitted || "N/A"}</td>
-                            <td className="border px-6 py-3 text-lg">{entry.forwardedBy || "N/A"}</td>
-                            <td className="border px-6 py-3 text-lg">{entry.forwardedTo || "N/A"}</td>
-                            <td className="border px-6 py-3 text-lg">{entry.status || "N/A"}</td>
-                            <td className="border px-6 py-3 text-lg">{entry.remarks || "N/A"}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : (
-                  <p className="text-center text-red-500 text-lg mt-4">No tracking history available.</p>
-                )}
-              </div>
-            </div>
+          {/* Tracking Table */}
+<div className="mt-12 flex justify-center px-8">
+  <div className="w-full max-w-5xl">
+    <h2 className="text-3xl font-semibold mb-6 text-center">Tracking History</h2>
+    {trackingData.length > 0 ? (
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse border border-gray-300 shadow-lg">
+          <thead>
+            <tr className="bg-gray-100">
+              <th className="border px-6 py-3 text-left text-lg font-semibold">Date and Time </th>
+              <th className="border px-6 py-3 text-left text-lg font-semibold">Forwarded By</th>
+              <th className="border px-6 py-3 text-left text-lg font-semibold">Forwarded To</th>
+              <th className="border px-6 py-3 text-left text-lg font-semibold">Status</th>
+              <th className="border px-6 py-3 text-left text-lg font-semibold">Remarks</th>
+            </tr>
+          </thead>
+          <tbody>
+            {trackingData
+              .sort((a, b) => new Date(a.dateTimeSubmitted).getTime() - new Date(b.dateTimeSubmitted).getTime())
+              .map((entry, index) => (
+                <tr key={index} className="border bg-white hover:bg-gray-50">
+                  <td className="border px-6 py-3 text-lg">{entry.dateTimeSubmitted || "N/A"}</td>
+                  <td className="border px-6 py-3 text-lg">{entry.forwardedBy || "N/A"}</td>
+                  <td className="border px-6 py-3 text-lg">{entry.forwardedTo || "N/A"}</td>
+                  <td className="border px-6 py-3 text-lg">{entry.status || "N/A"}</td>
+                  <td className="border px-6 py-3 text-lg">{entry.remarks || "N/A"}</td>
+                </tr>
+              ))}
+          </tbody>
+        </table>
+      </div>
+    ) : (
+      <p className="text-center text-red-500 text-lg mt-4">No tracking history available.</p>
+    )}
+  </div>
+</div>
           </div>
         </SidebarInset>
       </div>

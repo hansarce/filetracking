@@ -134,6 +134,7 @@ export default function AssignTrack() {
         awdReferenceNumber,
         forwardedBy: formattedForwardedBy,
         deadline: deadline.toISOString(),
+        startDate: now.toISOString(), // Add this line to include the start date
       };
 
       await push(ref(database, "documents"), documentData);

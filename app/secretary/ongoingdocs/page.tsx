@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 import { database } from "@/lib/firebase/firebase";
 import { ref, onValue, query, orderByChild, update } from "firebase/database";
@@ -36,7 +37,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { MoreVertical } from "lucide-react";
 import ProtectedRoute from '@/components/protected-route';
-import { Button } from "@/components/ui/button";
 
 interface DocumentData {
   id: string;
@@ -45,20 +45,22 @@ interface DocumentData {
   status: string;
   workingDays: string;
   dateTimeSubmitted: string;
+  startDate?: string; // Added this field
   forwardedBy?: string;
   forwardedTo?: string;
   remarks?: string;
 }
 
-const ITEMS_PER_PAGE = 10;
-
 export default function OngoingDocuments() {
   const [search, setSearch] = useState("");
   const [documents, setDocuments] = useState<DocumentData[]>([]);
-  const [filteredDocuments, setFilteredDocuments] = useState<DocumentData[]>([]);
+  const [sortedDocuments, setSortedDocuments] = useState<DocumentData[]>([]);
   const [loading, setLoading] = useState(true);
-  const [currentPage, setCurrentPage] = useState(1);
   const router = useRouter();
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(10);
 
   useEffect(() => {
     const docsRef = ref(database, "documents");
@@ -67,6 +69,7 @@ export default function OngoingDocuments() {
         const docs: DocumentData[] = [];
         snapshot.forEach((child) => {
           const doc = child.val();
+          // Only include documents with status "Open" or "Returned" (exclude "Closed")
           if (doc.status === "Open" || doc.status === "Returned") {
             docs.push({
               id: child.key || "",
@@ -75,34 +78,26 @@ export default function OngoingDocuments() {
               status: doc.status || "N/A",
               workingDays: doc.workingDays || "0",
               dateTimeSubmitted: doc.dateTimeSubmitted || doc.awdReceivedDate || "N/A",
+              startDate: doc.startDate || doc.dateTimeSubmitted || "N/A", // Use startDate if available, fallback to dateTimeSubmitted
               forwardedBy: doc.forwardedBy,
               forwardedTo: doc.forwardedTo,
               remarks: doc.remarks
             });
           }
         });
-
+        
         // Sort documents by AWD reference number in descending order
-        const sortedDocs = [...docs].sort((a, b) => {
-          // Extract numeric parts from AWD reference numbers for proper numeric sorting
+        const sorted = [...docs].sort((a, b) => {
+          // Extract the numeric part from AWD reference numbers
           const extractNumber = (ref: string) => {
             const match = ref.match(/\d+$/);
-            return match ? parseInt(match[0], 10) : 0;
+            return match ? parseInt(match[0]) : 0;
           };
-          
-          const aNum = extractNumber(a.awdReferenceNumber);
-          const bNum = extractNumber(b.awdReferenceNumber);
-          
-          // First try numeric comparison
-          if (aNum !== bNum) {
-            return bNum - aNum; // Descending order
-          }
-          // If numeric parts are equal, fall back to string comparison
-          return b.awdReferenceNumber.localeCompare(a.awdReferenceNumber);
+          return extractNumber(b.awdReferenceNumber) - extractNumber(a.awdReferenceNumber);
         });
-
-        setDocuments(sortedDocs);
-        setFilteredDocuments(sortedDocs);
+        
+        setDocuments(sorted);
+        setSortedDocuments(sorted);
         setLoading(false);
       } catch (error) {
         console.error("Error fetching documents:", error);
@@ -113,51 +108,113 @@ export default function OngoingDocuments() {
     return () => unsubscribe();
   }, []);
 
-  // Filter documents based on search
-  useEffect(() => {
-    if (search.trim() === "") {
-      setFilteredDocuments(documents);
-      setCurrentPage(1);
-    } else {
-      const filtered = documents.filter(doc => 
-        doc.subject.toLowerCase().includes(search.toLowerCase()) ||
-        doc.awdReferenceNumber.toLowerCase().includes(search.toLowerCase()) ||
-        doc.forwardedBy?.toLowerCase().includes(search.toLowerCase()) ||
-        doc.forwardedTo?.toLowerCase().includes(search.toLowerCase()) ||
-        doc.remarks?.toLowerCase().includes(search.toLowerCase())
-      );
-      setFilteredDocuments(filtered);
-      setCurrentPage(1);
-    }
-  }, [search, documents]);
-
-  // Pagination calculations
-  const totalPages = Math.ceil(filteredDocuments.length / ITEMS_PER_PAGE);
-  const currentData = filteredDocuments.slice(
-    (currentPage - 1) * ITEMS_PER_PAGE,
-    currentPage * ITEMS_PER_PAGE
+  // Filter and paginate documents
+  const filteredDocs = sortedDocuments.filter(doc => 
+    doc.subject.toLowerCase().includes(search.toLowerCase()) ||
+    doc.awdReferenceNumber.toLowerCase().includes(search.toLowerCase())
   );
 
-  const handlePageChange = (page: number) => {
-    setCurrentPage(page);
+  // Calculate pagination
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const currentItems = filteredDocs.slice(indexOfFirstItem, indexOfLastItem);
+  const totalPages = Math.ceil(filteredDocs.length / itemsPerPage);
+
+  const paginate = (pageNumber: number) => setCurrentPage(pageNumber);
+
+   // Improved getDeadlineStatus function
+const getDeadlineStatus = (startDate: string, workingDaysStr: string) => {
+  if (!startDate || startDate === "N/A" || !workingDaysStr) {
+    return { status: "N/A", color: "gray" };
+  }
+
+  const totalWorkingDays = parseInt(workingDaysStr) || 0;
+  if (totalWorkingDays <= 0) return { status: "No deadline", color: "gray" };
+
+  // Parse start date (handle both ISO and MM/DD/YYYY formats)
+  const parseDate = (dateStr: string) => {
+    if (dateStr.includes("/")) {
+      const [month, day, year] = dateStr.split("/");
+      return new Date(`${year}-${month}-${day}`);
+    }
+    return new Date(dateStr);
   };
 
-  const getDeadlineStatus = (date: string, days: string) => {
-    if (!date || date === "N/A") return { status: "N/A", color: "gray" };
+  const start = parseDate(startDate);
+  if (isNaN(start.getTime())) return { status: "Invalid date", color: "gray" };
+
+  // Calculate deadline date by adding working days (excluding weekends)
+  const calculateDeadline = (fromDate: Date, daysToAdd: number) => {
+    const result = new Date(fromDate);
+    let addedDays = 0;
     
-    const daysNum = parseInt(days) || 0;
-    const deadline = new Date(date);
-    deadline.setDate(deadline.getDate() + daysNum);
-    
-    const diff = Math.ceil((deadline.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-    
-    if (diff <= 0) return { status: "Overdue", color: "red" };
-    if (diff <= 3) return { status: `${diff} day(s) left`, color: "red" };
-    if (diff <= 7) return { status: `${diff} day(s) left`, color: "yellow" };
-    if (diff <= 20) return { status: `${diff} day(s) left`, color: "green" };
-    return { status: `${diff} day(s) left`, color: "gray" };
+    while (addedDays < daysToAdd) {
+      result.setDate(result.getDate() + 1);
+      if (result.getDay() !== 0 && result.getDay() !== 6) { // Skip weekends
+        addedDays++;
+      }
+    }
+    return result;
   };
 
+  const deadline = calculateDeadline(start, totalWorkingDays);
+
+  // Calculate remaining working days between today and deadline
+  const calculateRemainingWorkingDays = (from: Date, to: Date) => {
+    let current = new Date(from);
+    current.setDate(current.getDate() + 1); // Start counting from tomorrow
+    let remainingDays = 0;
+    
+    while (current <= to) {
+      if (current.getDay() !== 0 && current.getDay() !== 6) { // Count only weekdays
+        remainingDays++;
+      }
+      current.setDate(current.getDate() + 1);
+    }
+    return remainingDays;
+  };
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0); // Normalize to start of day
+  deadline.setHours(23, 59, 59, 999); // Normalize to end of deadline day
+
+  if (today > deadline) {
+    return { status: "Overdue", color: "red" };
+  }
+
+  const remainingDays = calculateRemainingWorkingDays(today, deadline);
+
+  // Format the status text
+  const formatStatusText = (days: number, dueDate: Date) => {
+    const formattedDate = dueDate.toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric', 
+      year: 'numeric' 
+    });
+    
+    if (days === 0) {
+      return `Due today (${formattedDate})`;
+    }
+    return `${days} working day${days !== 1 ? 's' : ''} left (due ${formattedDate})`;
+  };
+
+  const statusText = formatStatusText(remainingDays, deadline);
+
+  // Determine color based on urgency
+  if (remainingDays === 0) return { status: statusText, color: "red" };
+  if (remainingDays <= 3) return { status: statusText, color: "red" };
+  if (remainingDays <= 7) return { status: statusText, color: "yellow" };
+  return { status: statusText, color: "green" };
+};
+
+// Helper function to format date as "MMM DD, YYYY"
+const formatDate = (date: Date) => {
+  return date.toLocaleDateString('en-US', { 
+    month: 'short', 
+    day: 'numeric', 
+    year: 'numeric' 
+  });
+};
   const handleEdit = (id: string) => {
     localStorage.setItem("selectedAwdRefNum", id);
     router.push("/admin/Documents/editaction");
@@ -177,7 +234,7 @@ export default function OngoingDocuments() {
   return (
     <ProtectedRoute allowedDivisions={['secretary']}>
       <SidebarProvider>
-        <div className="flex h-screen">
+        <div className="flex h-screen w-screen">
           <AppSidebarSecretary />
           <SidebarInset className="flex flex-1 flex-col">
             <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4 bg-white">
@@ -197,14 +254,17 @@ export default function OngoingDocuments() {
             </header>
 
             <div className="p-6">
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
-                <h1 className="text-4xl md:text-6xl font-bold p-3">Ongoing Documents</h1>
+              <div className="flex justify-between items-center mb-6">
+                <h1 className="text-6xl p-3 font-bold">Ongoing Documents</h1>
                 <Input
                   type="text"
                   placeholder="Search..."
                   value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="w-full md:w-64 border p-2 rounded"
+                  onChange={(e) => {
+                    setSearch(e.target.value);
+                    setCurrentPage(1); // Reset to first page when searching
+                  }}
+                  className="w-64 border p-2 rounded"
                 />
               </div>
 
@@ -214,7 +274,7 @@ export default function OngoingDocuments() {
                 </div>
               ) : (
                 <>
-                  <div className="rounded-md border">
+                  <div className="rounded-md border mb-4">
                     <Table>
                       <TableHeader>
                         <TableRow>
@@ -227,17 +287,22 @@ export default function OngoingDocuments() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {currentData.length > 0 ? (
-                          currentData.map((doc) => {
-                            const deadline = getDeadlineStatus(doc.dateTimeSubmitted, doc.workingDays);
+                        {currentItems.length > 0 ? (
+                          currentItems.map((doc) => {
+                            // Use startDate for deadline calculation if available, otherwise fallback to dateTimeSubmitted
+                            const deadlineDate = doc.startDate || doc.dateTimeSubmitted;
+                            const deadline = getDeadlineStatus(deadlineDate, doc.workingDays);
                             return (
                               <TableRow
                                 key={doc.id}
                                 className="cursor-pointer hover:bg-gray-200"
-                                onClick={() => router.push(`/admin/Documents/subjectinformation?awdRef=${doc.awdReferenceNumber}`)}
+                                onClick={() => {
+                                  localStorage.setItem("selectedAwdRefNum", doc.awdReferenceNumber);
+                                  router.push(`/secretary/subjectinformation`);
+                                }}
                               >
                                 <TableCell>{doc.dateTimeSubmitted}</TableCell>
-                                <TableCell>{doc.awdReferenceNumber}</TableCell>
+                                <TableCell className="font-medium">{doc.awdReferenceNumber}</TableCell>
                                 <TableCell>{doc.subject}</TableCell>
                                 <TableCell>
                                   <Badge
@@ -298,45 +363,50 @@ export default function OngoingDocuments() {
                     </Table>
                   </div>
 
-                  {/* Pagination controls */}
-                  {filteredDocuments.length > ITEMS_PER_PAGE && (
-                    <div className="flex flex-col sm:flex-row justify-between items-center mt-4 gap-4">
+                  {/* Pagination Controls */}
+                  {filteredDocs.length > 0 && (
+                    <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
                       <div className="text-sm text-gray-600">
-                        Showing {(currentPage - 1) * ITEMS_PER_PAGE + 1} to{" "}
-                        {Math.min(currentPage * ITEMS_PER_PAGE, filteredDocuments.length)} of{" "}
-                        {filteredDocuments.length} entries
+                        Showing {indexOfFirstItem + 1} to {Math.min(indexOfLastItem, filteredDocs.length)} of {filteredDocs.length} entries
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex gap-2 flex-wrap justify-center">
                         <Button
-                          variant="outline"
-                          onClick={() => handlePageChange(1)}
+                          onClick={() => paginate(currentPage - 1)}
                           disabled={currentPage === 1}
-                        >
-                          First
-                        </Button>
-                        <Button
                           variant="outline"
-                          onClick={() => handlePageChange(currentPage - 1)}
-                          disabled={currentPage === 1}
+                          size="sm"
                         >
                           Previous
                         </Button>
-                        <span className="flex items-center px-4">
-                          Page {currentPage} of {totalPages}
-                        </span>
+                        {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                          let pageNum;
+                          if (totalPages <= 5) {
+                            pageNum = i + 1;
+                          } else if (currentPage <= 3) {
+                            pageNum = i + 1;
+                          } else if (currentPage >= totalPages - 2) {
+                            pageNum = totalPages - 4 + i;
+                          } else {
+                            pageNum = currentPage - 2 + i;
+                          }
+                          return (
+                            <Button
+                              key={pageNum}
+                              onClick={() => paginate(pageNum)}
+                              variant={currentPage === pageNum ? "default" : "outline"}
+                              size="sm"
+                            >
+                              {pageNum}
+                            </Button>
+                          );
+                        })}
                         <Button
-                          variant="outline"
-                          onClick={() => handlePageChange(currentPage + 1)}
+                          onClick={() => paginate(currentPage + 1)}
                           disabled={currentPage === totalPages}
+                          variant="outline"
+                          size="sm"
                         >
                           Next
-                        </Button>
-                        <Button
-                          variant="outline"
-                          onClick={() => handlePageChange(totalPages)}
-                          disabled={currentPage === totalPages}
-                        >
-                          Last
                         </Button>
                       </div>
                     </div>
