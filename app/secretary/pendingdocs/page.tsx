@@ -211,7 +211,7 @@ export default function PendingDocs() {
         originatingOffice: selectedDoc.originatingOffice,
         remarks: remarks || "FAA",
         status: "Open",
-        workingDays: calculateWorkingDays(selectedDoc.startDate, selectedDoc.deadline),
+        workingDays: selectedDoc.workingDays,
         assignedInspector: selectedDoc.assignedInspector || ""
       });
 

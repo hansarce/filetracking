@@ -355,16 +355,17 @@ const handleManagersEndorsement = async () => {
       year: "numeric",
     });
 
-    // Update the original document
+    // Update the original document - keep status and working days unchanged
     const docRef = ref(database, `documents/${selectedDoc.id}`);
     await update(docRef, {
       forwardedTo: "Secretary",
       remarks: managerRemarks,
-      status: "For Manager's Endorsement",
+      // Status remains unchanged
+      // workingDays remains unchanged
       endorsementDate: formattedDate,
     });
 
-    // Create a tracking record for the endorsement
+    // Create a tracking record with all document data
     const trackingRef = ref(database, "tracking");
     await push(trackingRef, {
       id: selectedDoc.id,
@@ -375,11 +376,17 @@ const handleManagersEndorsement = async () => {
       deadline: selectedDoc.deadline,
       fsisReferenceNumber: selectedDoc.fsisReferenceNumber,
       originatingOffice: selectedDoc.originatingOffice,
-      forwardedBy: selectedDoc.forwardedTo,
+      forwardedBy: selectedDoc.forwardedTo, // Current division is forwarding
       forwardedTo: "Secretary",
       remarks: managerRemarks,
-      status: "For Manager's Endorsement",
+      status: selectedDoc.status, // Keep original status
+      workingDays: selectedDoc.workingDays, // Keep original working days
+      assignedInspector: selectedDoc.assignedInspector,
+      dateTimeSubmitted: selectedDoc.dateTimeSubmitted,
+      startDate: selectedDoc.startDate,
       endorsementDate: formattedDate,
+      // Include any other fields from the document
+      ...(selectedDoc.endDate && { endDate: selectedDoc.endDate }),
     });
 
     setSelectedDoc(null);
@@ -387,6 +394,7 @@ const handleManagersEndorsement = async () => {
     alert("Document successfully forwarded for Manager's Endorsement!");
   } catch (error) {
     console.error("Error forwarding document for Manager's Endorsement:", error);
+    alert("Failed to forward document. Please try again.");
   }
 };
 
