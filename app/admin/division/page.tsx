@@ -703,7 +703,7 @@ const handleManagersEndorsement = async () => {
                   Return Document
                 </Button>
                 <div className="mt-4">
-                  <label className="block text-lg font-semibold mb-2">Manager's Remarks:</label>
+                  <label className="block text-lg font-semibold mb-2">Remarks:</label>
                   <Input
                     type="text"
                     placeholder="Enter remarks..."
@@ -717,7 +717,7 @@ const handleManagersEndorsement = async () => {
                   onClick={handleManagersEndorsement} 
                   disabled={!managerRemarks.trim()}
                 >
-                  Forward for Manager's Endorsement
+                  Forward to Manager
                 </Button>
               </div>
             )}
