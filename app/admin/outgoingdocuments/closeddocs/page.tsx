@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { database } from "@/lib/firebase/firebase";
-import { ref, onValue, query, orderByChild, equalTo } from "firebase/database";
+import { ref, onValue, query, orderByChild, equalTo, update } from "firebase/database";
 import { AppSidebar } from "@/components/app-sidebar";
 import {
   SidebarInset,
@@ -28,32 +28,41 @@ import {
 import { useRouter } from "next/navigation";
 import ProtectedRoute from '@/components/protected-route';
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 
 export type DocData = {
-  awdReceivedDate: string;
+  id: string;
   awdReferenceNumber: string;
-  subject: string;
-  dateofDocument: string;
-  deadline: string;
   originatingOffice: string;
-  fsisReferenceNumber: string;
-  workingDays: string;
+  subject: string;
+  receivedBy?: string;
+  assignedInspector: string;
+  awdReceivedDate: string;
+  dateOfDocument: string;
+  dateTimeSubmitted: string;
+  deadline: string;
+  endDate: string;
   forwardedBy: string;
   forwardedTo: string;
+  fsisReferenceNumber: string;
   remarks: string;
+  startDate: string;
   status: string;
-  dateTimeSubmitted: string;
-  endDate?: string;  // Changed from closedDate to endDate
+  workingDays: string;
 };
 
 export default function ClosedDocuments() {
   const [documents, setDocuments] = useState<DocData[]>([]);
-  const [selectedDoc, setSelectedDoc] = useState<DocData | null>(null);
+  const [filteredDocuments, setFilteredDocuments] = useState<DocData[]>([]);
+  const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(10); // You can adjust this number
+  const [itemsPerPage] = useState(10);
+  const [receiverName, setReceiverName] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [isUpdating, setIsUpdating] = useState(false);
   const router = useRouter();
 
-  // Fetch documents with status "Closed"
   useEffect(() => {
     const docsRef = ref(database, "documents");
     const docsQuery = query(docsRef, orderByChild("status"), equalTo("Closed"));
@@ -65,18 +74,18 @@ export default function ClosedDocuments() {
           snapshot.forEach((childSnapshot) => {
             const doc = childSnapshot.val();
             fetchedDocs.push({ 
-              awdReferenceNumber: childSnapshot.key, 
-              ...doc,
-              endDate: doc.endDate || doc.closedDate // Fallback to closedDate if endDate doesn't exist
+              id: childSnapshot.key,
+              ...doc
             });
           });
-          // Sort documents by AWD reference number in descending order
           fetchedDocs.sort((a, b) => 
             b.awdReferenceNumber.localeCompare(a.awdReferenceNumber)
           );
           setDocuments(fetchedDocs);
+          setFilteredDocuments(fetchedDocs);
         } else {
           setDocuments([]);
+          setFilteredDocuments([]);
         }
       } catch (error) {
         console.error("Error fetching documents:", error);
@@ -86,19 +95,92 @@ export default function ClosedDocuments() {
     return () => unsubscribe();
   }, []);
 
-  // Handle row click
+  useEffect(() => {
+    if (searchTerm.trim() === "") {
+      setFilteredDocuments(documents);
+      setCurrentPage(1);
+    } else {
+      const filtered = documents.filter(doc => 
+        doc.awdReferenceNumber.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+      setFilteredDocuments(filtered);
+      setCurrentPage(1);
+    }
+  }, [searchTerm, documents]);
+
   const handleRowClick = (doc: DocData) => {
     localStorage.setItem("selectedAwdRefNum", doc.awdReferenceNumber);
     router.push(`/admin/Documents/subjectinformation`);
   };
 
-  // Get current documents for pagination
+  const toggleRowSelection = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const newSelection = new Set(selectedRows);
+    if (newSelection.has(id)) {
+      newSelection.delete(id);
+    } else {
+      newSelection.add(id);
+    }
+    setSelectedRows(newSelection);
+  };
+
+  const toggleAllRowsSelection = () => {
+    const currentDocNumbers = currentDocuments.map(doc => doc.id);
+    const allSelected = currentDocNumbers.every(num => selectedRows.has(num));
+    
+    const newSelection = new Set(selectedRows);
+    
+    if (allSelected) {
+      currentDocNumbers.forEach(num => newSelection.delete(num));
+    } else {
+      currentDocNumbers.forEach(num => newSelection.add(num));
+    }
+    
+    setSelectedRows(newSelection);
+  };
+
+  const updateReceivedBy = async () => {
+    if (selectedRows.size === 0 || !receiverName.trim()) return;
+    
+    try {
+      setIsUpdating(true);
+      const updates: Record<string, any> = {};
+      const timestamp = new Date().toLocaleString();
+      
+      Array.from(selectedRows).forEach(docId => {
+        updates[`documents/${docId}/receivedBy`] = `${receiverName.trim()} (${timestamp})`;
+      });
+      
+      await update(ref(database), updates);
+      setReceiverName("");
+      setSelectedRows(new Set());
+    } catch (error) {
+      console.error("Error updating documents:", error);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const selectAllMatching = () => {
+    if (searchTerm.trim() === "") return;
+    
+    const matchingDocs = filteredDocuments.map(doc => doc.id);
+    const newSelection = new Set(selectedRows);
+    
+    matchingDocs.forEach(docId => {
+      newSelection.add(docId);
+    });
+    
+    setSelectedRows(newSelection);
+  };
+
   const indexOfLastItem = currentPage * itemsPerPage;
   const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-  const currentDocuments = documents.slice(indexOfFirstItem, indexOfLastItem);
-
-  // Change page
+  const currentDocuments = filteredDocuments.slice(indexOfFirstItem, indexOfLastItem);
   const paginate = (pageNumber: number) => setCurrentPage(pageNumber);
+
+  const allRowsSelected = currentDocuments.length > 0 && 
+    currentDocuments.every(doc => selectedRows.has(doc.id));
 
   return (
     <ProtectedRoute allowedDivisions={['admin']}>
@@ -125,37 +207,106 @@ export default function ClosedDocuments() {
             <div className="p-6 max-w-5xl mx-auto">
               <div className="flex justify-between items-center mb-6">
                 <h1 className="text-4xl font-bold">Closed Documents</h1>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Search by AWD number"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-64"
+                  />
+                  {searchTerm && (
+                    <Button 
+                      variant="outline"
+                      onClick={selectAllMatching}
+                    >
+                      Select All Matching
+                    </Button>
+                  )}
+                </div>
               </div>
+
+              {selectedRows.size > 0 && (
+                <div className="flex gap-2 items-center mb-4 p-4 bg-gray-50 rounded-lg">
+                  <Input
+                    placeholder="Enter receiver name"
+                    value={receiverName}
+                    onChange={(e) => setReceiverName(e.target.value)}
+                    className="w-64"
+                  />
+                  <Button 
+                    onClick={updateReceivedBy}
+                    disabled={!receiverName.trim() || isUpdating}
+                  >
+                    {isUpdating ? "Updating..." : "Mark as Received"}
+                  </Button>
+                  <Button 
+                    variant="ghost" 
+                    onClick={() => setSelectedRows(new Set())}
+                    disabled={isUpdating}
+                  >
+                    Clear Selection
+                  </Button>
+                  <span className="text-sm text-gray-600 ml-2">
+                    {selectedRows.size} document(s) selected
+                  </span>
+                </div>
+              )}
 
               <div className="overflow-x-auto">
                 <Table className="border w-full">
                   <TableHeader>
                     <TableRow className="bg-gray-100">
-                      <TableHead>Date Submitted</TableHead>
+                      <TableHead>
+                        <Checkbox
+                          checked={allRowsSelected}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleAllRowsSelection();
+                          }}
+                        />
+                      </TableHead>
                       <TableHead>AWD No.</TableHead>
+                      <TableHead>Originating Office</TableHead>
                       <TableHead>Subject</TableHead>
-                      <TableHead>Closed Date</TableHead>
+                      <TableHead>Received By</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {currentDocuments.map((doc) => (
-                      <TableRow
-                        key={doc.awdReferenceNumber}
-                        onClick={() => handleRowClick(doc)}
-                        className="cursor-pointer hover:bg-gray-100"
-                      >
-                        <TableCell>{doc.dateTimeSubmitted}</TableCell>
-                        <TableCell>{doc.awdReferenceNumber}</TableCell>
-                        <TableCell>{doc.subject}</TableCell>
-                        <TableCell>{doc.endDate || "N/A"}</TableCell>
+                    {currentDocuments.length > 0 ? (
+                      currentDocuments.map((doc) => (
+                        <TableRow
+                          key={doc.id}
+                          onClick={() => handleRowClick(doc)}
+                          className="cursor-pointer hover:bg-gray-100"
+                        >
+                          <TableCell onClick={(e) => toggleRowSelection(doc.id, e)}>
+                            <Checkbox 
+                              checked={selectedRows.has(doc.id)}
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          </TableCell>
+                          <TableCell>{doc.awdReferenceNumber}</TableCell>
+                          <TableCell>{doc.originatingOffice}</TableCell>
+                          <TableCell>{doc.subject}</TableCell>
+                          <TableCell>{doc.receivedBy || "Not received yet"}</TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center py-4">
+                          {searchTerm ? "No matching documents found" : "No closed documents available"}
+                        </TableCell>
                       </TableRow>
-                    ))}
+                    )}
                   </TableBody>
                 </Table>
               </div>
 
               {/* Pagination */}
-              <div className="flex justify-center mt-4">
+              <div className="flex justify-between items-center mt-4">
+                <div className="text-sm text-gray-600">
+                  Showing {indexOfFirstItem + 1}-{Math.min(indexOfLastItem, filteredDocuments.length)} of {filteredDocuments.length} documents
+                </div>
                 <div className="flex space-x-2">
                   <Button
                     onClick={() => paginate(currentPage - 1)}
@@ -164,7 +315,7 @@ export default function ClosedDocuments() {
                   >
                     Previous
                   </Button>
-                  {Array.from({ length: Math.ceil(documents.length / itemsPerPage) }, (_, i) => (
+                  {Array.from({ length: Math.ceil(filteredDocuments.length / itemsPerPage) }, (_, i) => (
                     <Button
                       key={i + 1}
                       onClick={() => paginate(i + 1)}
@@ -175,7 +326,7 @@ export default function ClosedDocuments() {
                   ))}
                   <Button
                     onClick={() => paginate(currentPage + 1)}
-                    disabled={currentPage === Math.ceil(documents.length / itemsPerPage)}
+                    disabled={currentPage === Math.ceil(filteredDocuments.length / itemsPerPage)}
                     variant="outline"
                   >
                     Next
