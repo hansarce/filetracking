@@ -19,6 +19,7 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
 import ProtectedRoute from '@/components/protected-route';
+
 export default function SubjectInformation() {
   const params = useParams();
   const router = useRouter();
@@ -47,7 +48,6 @@ export default function SubjectInformation() {
 
     const docQuery = query(ref(database, "documents"), orderByChild("awdReferenceNumber"), equalTo(awdrefnu));
     
-    // Replace get() with onValue() for document data
     const unsubscribeDoc = onValue(docQuery, (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.val();
@@ -63,7 +63,6 @@ export default function SubjectInformation() {
       setLoading(false);
     });
 
-    // Set up onValue() for tracking data
     const trackingQuery = query(ref(database, "tracking"), orderByChild("awdReferenceNumber"), equalTo(awdrefnu));
     
     const unsubscribeTracking = onValue(trackingQuery, (snapshot) => {
@@ -78,7 +77,6 @@ export default function SubjectInformation() {
       console.error("Error fetching tracking data:", error);
     });
 
-    // Clean up the listeners when component unmounts or awdrefnu changes
     return () => {
       unsubscribeDoc();
       unsubscribeTracking();
@@ -89,86 +87,88 @@ export default function SubjectInformation() {
   if (!subjectData) return <p className="text-center mt-10 text-red-500">No data found.</p>;
 
   return (
-       <ProtectedRoute allowedDivisions={['admin']}>
-    <SidebarProvider>
-      <div className="flex h-screen">
-        <AppSidebar />
-        <SidebarInset className="flex flex-1 flex-col">
-          <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4 bg-white">
-            <SidebarTrigger className="-ml-1" />
-            <Separator orientation="vertical" className="mr-2 h-4" />
-            <Breadcrumb>
-              <BreadcrumbList>
-                <BreadcrumbItem className="hidden md:block">
-                  <BreadcrumbPage>Documents</BreadcrumbPage>
-                </BreadcrumbItem>
-                <BreadcrumbSeparator className="hidden md:block" />
-                <BreadcrumbItem>
-                  <BreadcrumbPage>Subject Information</BreadcrumbPage>
-                </BreadcrumbItem>
-              </BreadcrumbList>
-            </Breadcrumb>
-          </header>
-          <div className="pl-12 pt-8">
-            <h1 className="text-6xl font-bold mb-16">{subjectData.subject || "No Title"}</h1>
-            <div className="grid grid-cols-2 gap-6 pl-12">
-              {[ 
-                { label: "AWD Reference Number", value: subjectData.awdReferenceNumber },
-                { label: "Originating Officer", value: subjectData.originatingOffice },
-                { label: "Date of Document", value: subjectData.dateOfDocument },
-                { label: "FSIS Reference Number", value: subjectData.fsisReferenceNumber },
-                { label: "AWD Date Received", value: subjectData.awdReceivedDate },
-                { label: "Status", value: subjectData.status },
-                { label: "Remarks", value: subjectData.remarks },
-                 { label: "Inspector", value: subjectData.assignedInspector },
-              ].map((item, index) => (
-                <div key={index}>
-                  <label className="block text-xl font-semibold pb-2">{item.label}</label>
-                  <label className="block text-xl font-normal pb-2">{item.value || "N/A"}</label>
-                </div>
-              ))}
-            </div>
+    <ProtectedRoute allowedDivisions={['admin']}>
+      <SidebarProvider>
+        <div className="flex h-screen">
+          <AppSidebar />
+          <SidebarInset className="flex flex-1 flex-col">
+            <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4 bg-white">
+              <SidebarTrigger className="-ml-1" />
+              <Separator orientation="vertical" className="mr-2 h-4" />
+              <Breadcrumb>
+                <BreadcrumbList>
+                  <BreadcrumbItem className="hidden md:block">
+                    <BreadcrumbPage>Documents</BreadcrumbPage>
+                  </BreadcrumbItem>
+                  <BreadcrumbSeparator className="hidden md:block" />
+                  <BreadcrumbItem>
+                    <BreadcrumbPage>Subject Information</BreadcrumbPage>
+                  </BreadcrumbItem>
+                </BreadcrumbList>
+              </Breadcrumb>
+            </header>
+            <div className="pl-12 pt-8">
+              <h1 className="text-6xl font-bold mb-16">{subjectData.subject || "No Title"}</h1>
+              <div className="grid grid-cols-2 gap-6 pl-12">
+                {[ 
+                  { label: "AWD Reference Number", value: subjectData.awdReferenceNumber },
+                  { label: "Originating Officer", value: subjectData.originatingOffice },
+                  { label: "Date of Document", value: subjectData.dateOfDocument },
+                  { label: "FSIS Reference Number", value: subjectData.fsisReferenceNumber },
+                  { label: "AWD Date Received", value: subjectData.awdReceivedDate },
+                  { label: "Status", value: subjectData.status },
+                  { label: "Remarks", value: subjectData.remarks },
+                  { label: "Inspector", value: subjectData.assignedInspector },
+                ].map((item, index) => (
+                  <div key={index}>
+                    <label className="block text-xl font-semibold pb-2">{item.label}</label>
+                    <label className="block text-xl font-normal pb-2">{item.value || "N/A"}</label>
+                  </div>
+                ))}
+              </div>
 
-          {/* Tracking Table */}
-<div className="mt-12 flex justify-center px-8">
-  <div className="w-full max-w-5xl">
-    <h2 className="text-3xl font-semibold mb-6 text-center">Tracking History</h2>
-    {trackingData.length > 0 ? (
-      <div className="overflow-x-auto">
-        <table className="w-full border-collapse border border-gray-300 shadow-lg">
-          <thead>
-            <tr className="bg-gray-100">
-              <th className="border px-6 py-3 text-left text-lg font-semibold">Date and Time </th>
-              <th className="border px-6 py-3 text-left text-lg font-semibold">Forwarded By</th>
-              <th className="border px-6 py-3 text-left text-lg font-semibold">Forwarded To</th>
-              <th className="border px-6 py-3 text-left text-lg font-semibold">Status</th>
-              <th className="border px-6 py-3 text-left text-lg font-semibold">Remarks</th>
-            </tr>
-          </thead>
-          <tbody>
-            {trackingData
-              .sort((a, b) => new Date(a.dateTimeSubmitted).getTime() - new Date(b.dateTimeSubmitted).getTime())
-              .map((entry, index) => (
-                <tr key={index} className="border bg-white hover:bg-gray-50">
-                  <td className="border px-6 py-3 text-lg">{entry.dateTimeSubmitted || "N/A"}</td>
-                  <td className="border px-6 py-3 text-lg">{entry.forwardedBy || "N/A"}</td>
-                  <td className="border px-6 py-3 text-lg">{entry.forwardedTo || "N/A"}</td>
-                  <td className="border px-6 py-3 text-lg">{entry.status || "N/A"}</td>
-                  <td className="border px-6 py-3 text-lg">{entry.remarks || "N/A"}</td>
-                </tr>
-              ))}
-          </tbody>
-        </table>
-      </div>
-    ) : (
-      <p className="text-center text-red-500 text-lg mt-4">No tracking history available.</p>
-    )}
-  </div>
-</div>
-          </div>
-        </SidebarInset>
-      </div>
-    </SidebarProvider>
+              {/* Tracking Table */}
+              <div className="mt-12 flex justify-center px-8 pb-10">
+                <div className="w-full max-w-5xl">
+                  <h2 className="text-3xl font-semibold mb-6 text-center">Tracking History</h2>
+                  {trackingData.length > 0 ? (
+                    <div className="overflow-x-auto">
+                      <table className="w-full border-collapse border border-gray-300 shadow-lg">
+                        <thead>
+                          <tr className="bg-gray-100">
+                            <th className="border px-6 py-3 text-left text-lg font-semibold">Date and Time</th>
+                            <th className="border px-6 py-3 text-left text-lg font-semibold">Forwarded By</th>
+                            <th className="border px-6 py-3 text-left text-lg font-semibold">Forwarded To</th>
+                            <th className="border px-6 py-3 text-left text-lg font-semibold">Status</th>
+                            <th className="border px-6 py-3 text-left text-lg font-semibold">Remarks</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {trackingData
+                            .sort((a, b) => new Date(a.dateTimeSubmitted).getTime() - new Date(b.dateTimeSubmitted).getTime())
+                            .map((entry, index) => (
+                              <tr key={index} className="border bg-white hover:bg-gray-50">
+                                <td className="border px-6 py-3 text-lg">{entry.dateTimeSubmitted || "N/A"}</td>
+                                <td className="border px-6 py-3 text-lg">{entry.forwardedBy || "N/A"}</td>
+                                <td className="border px-6 py-3 text-lg">
+                                  {entry.forwardedtoname ? `${entry.forwardedtoname} (${entry.forwardedTo || ''})` : entry.forwardedTo || "N/A"}
+                                </td>
+                                <td className="border px-6 py-3 text-lg">{entry.status || "N/A"}</td>
+                                <td className="border px-6 py-3 text-lg">{entry.remarks || "N/A"}</td>
+                              </tr>
+                            ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <p className="text-center text-red-500 text-lg mt-4">No tracking history available.</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </SidebarInset>
+        </div>
+      </SidebarProvider>
     </ProtectedRoute>
   );
 }

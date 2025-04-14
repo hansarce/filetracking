@@ -21,6 +21,7 @@ export default function AssignTrack() {
     awdReceivedDate: "",
     forwardedBy: "",
     forwardedTo: "",
+    forwardedtoname: "",
     remarks: "",
     status: "Open",
     workingDays: "3",
@@ -133,8 +134,9 @@ export default function AssignTrack() {
         dateTimeSubmitted,
         awdReferenceNumber,
         forwardedBy: formattedForwardedBy,
+        forwardedtoname: formData.forwardedtoname,
         deadline: deadline.toISOString(),
-        startDate: now.toISOString(), // Add this line to include the start date
+        startDate: now.toISOString(),
       };
 
       await push(ref(database, "documents"), documentData);
@@ -149,12 +151,12 @@ export default function AssignTrack() {
         awdReceivedDate: "",
         forwardedBy: "",
         forwardedTo: "",
+        forwardedtoname: "",
         remarks: "",
         status: "Open",
         workingDays: "3",
       });
 
-      // Fetch new AWD number after submission
       await fetchAwdNumber();
       router.push("/admin/Documents/sentdocs");
     } catch (error) {
@@ -236,6 +238,7 @@ export default function AssignTrack() {
 
                 <div>
                   <label className="block text-lg font-semibold pb-2">Forwarded To</label>
+                   <Input name="forwardedtoname" type="text" className="w-[500px]  h-[50px]" onChange={handleChange} required />
                   <Select onValueChange={(value) => setFormData({ ...formData, forwardedTo: value })} required>
                     <SelectTrigger className="w-full h-12">
                       <SelectValue placeholder="Select division" />

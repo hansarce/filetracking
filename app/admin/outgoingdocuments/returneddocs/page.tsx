@@ -40,6 +40,7 @@ export type DocData = {
   originatingOffice: string;
   forwardedBy: string;
   forwardedTo: string;
+  forwardedtoname?: string;
   remarks: string;
   status: string;
   workingDays: string;
@@ -51,7 +52,9 @@ export default function ReturnedDocuments() {
   const [documents, setDocuments] = useState<DocData[]>([]);
   const [filteredDocuments, setFilteredDocuments] = useState<DocData[]>([]);
   const [selectedDoc, setSelectedDoc] = useState<DocData | null>(null);
-  
+  const [selectedDivision, setSelectedDivision] = useState("");
+  const [forwardedToName, setForwardedToName] = useState("");
+
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
@@ -65,13 +68,16 @@ export default function ReturnedDocuments() {
           snapshot.forEach((childSnapshot) => {
             const doc = childSnapshot.val();
             if (doc.status === "Returned") {
-              fetchedDocs.push({ id: childSnapshot.key, ...doc });
+              fetchedDocs.push({ 
+                id: childSnapshot.key, 
+                ...doc,
+                forwardedtoname: doc.forwardedtoname || ""
+              });
             }
           });
           
           // Sort documents by AWD reference number in descending order
           const sortedDocs = [...fetchedDocs].sort((a, b) => {
-            // Extract numeric parts from AWD reference numbers for proper numeric sorting
             const extractNumber = (ref: string) => {
               const match = ref.match(/\d+$/);
               return match ? parseInt(match[0], 10) : 0;
@@ -80,11 +86,9 @@ export default function ReturnedDocuments() {
             const aNum = extractNumber(a.awdReferenceNumber);
             const bNum = extractNumber(b.awdReferenceNumber);
             
-            // First try numeric comparison
             if (aNum !== bNum) {
               return bNum - aNum;
             }
-            // If numeric parts are equal, fall back to string comparison
             return b.awdReferenceNumber.localeCompare(a.awdReferenceNumber);
           });
           
@@ -99,7 +103,6 @@ export default function ReturnedDocuments() {
       }
     });
 
-    // Clean up the subscription on unmount
     return () => unsubscribe();
   }, []);
 
@@ -129,83 +132,85 @@ export default function ReturnedDocuments() {
 
   const paginate = (pageNumber: number) => setCurrentPage(pageNumber);
 
- const handleForwardToSecretary = async () => {
-  if (!selectedDoc) return;
+  const handleForwardToDivision = async () => {
+    if (!selectedDoc || !selectedDivision) return;
 
-  try {
-    const userUID = localStorage.getItem("authToken");
-    if (!userUID) {
-      alert("User not authenticated.");
-      return;
+    try {
+      const userUID = localStorage.getItem("authToken");
+      if (!userUID) {
+        alert("User not authenticated.");
+        return;
+      }
+
+      // Fetch user's name and division from Firebase
+      let userName, userDivision;
+      const userRef = ref(database, `accounts/${userUID}`);
+      await new Promise((resolve) => {
+        const userUnsubscribe = onValue(userRef, (userSnapshot) => {
+          userUnsubscribe();
+          if (userSnapshot.exists()) {
+            const userData = userSnapshot.val();
+            userName = userData.name;
+            userDivision = userData.division;
+          } else {
+            alert("User details not found in the database.");
+          }
+          resolve(null);
+        }, { onlyOnce: true });
+      });
+
+      if (!userName || !userDivision) return;
+
+      const forwardedBy = `${userName} (${userDivision})`;
+      const dateTimeSubmitted = new Date().toLocaleString("en-US", {
+        month: "2-digit",
+        day: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+      });
+
+      // Update the document in the "documents" table
+      const docRef = ref(database, `documents/${selectedDoc.id}`);
+      await update(docRef, {
+        ...selectedDoc,
+        forwardedBy,
+        forwardedTo: selectedDivision,
+        forwardedtoname: forwardedToName || selectedDivision,
+        remarks: `Forwarded to ${selectedDivision}`,
+        status: "Open",
+        dateTimeSubmitted,
+      });
+
+      // Create a flat tracking entry with a unique ID
+      const trackingRef = ref(database, "tracking");
+      const newTrackingEntry = {
+        documentId: selectedDoc.id,
+        action: "Forwarded",
+        forwardedBy,
+        forwardedTo: selectedDivision,
+        forwardedtoname: forwardedToName || selectedDivision,
+        remarks: `Forwarded to ${selectedDivision}`,
+        status: "Open",
+        dateTimeSubmitted,
+        actionTimestamp: Date.now(),
+        awdReferenceNumber: selectedDoc.awdReferenceNumber,
+        subject: selectedDoc.subject,
+        originatingOffice: selectedDoc.originatingOffice
+      };
+      
+      await push(trackingRef, newTrackingEntry);
+
+      setSelectedDoc(null);
+      setSelectedDivision("");
+      setForwardedToName("");
+      alert(`Document successfully forwarded to ${selectedDivision}!`);
+    } catch (error) {
+      console.error("Error forwarding document:", error);
     }
+  };
 
-    // Fetch user's name and division from Firebase
-    let userName, userDivision;
-    const userRef = ref(database, `accounts/${userUID}`);
-    await new Promise((resolve) => {
-      const userUnsubscribe = onValue(userRef, (userSnapshot) => {
-        userUnsubscribe();
-        if (userSnapshot.exists()) {
-          const userData = userSnapshot.val();
-          userName = userData.name;
-          userDivision = userData.division;
-        } else {
-          alert("User details not found in the database.");
-        }
-        resolve(null);
-      }, { onlyOnce: true });
-    });
-
-    if (!userName || !userDivision) return;
-
-    const forwardedBy = `${userName} (${userDivision})`;
-    const forwardTo = "Secretary";
-    const dateTimeSubmitted = new Date().toLocaleString("en-US", {
-      month: "2-digit",
-      day: "2-digit",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
-    });
-
-    // Update the document in the "documents" table
-    const docRef = ref(database, `documents/${selectedDoc.id}`);
-    await update(docRef, {
-      ...selectedDoc, // Keep all existing fields
-      forwardedBy,
-      forwardedTo: forwardTo,
-      remarks: "Forwarded to Secretary",
-      status: "Open",
-      dateTimeSubmitted,
-    });
-
-    // Create a flat tracking entry with a unique ID
-    const trackingRef = ref(database, "tracking");
-    const newTrackingEntry = {
-      documentId: selectedDoc.id, // Reference to the original document
-      action: "Forwarded",
-      forwardedBy,
-      forwardedTo: "Secretary",
-      remarks: "Forwarded to Secretary",
-      status: "Open",
-      dateTimeSubmitted,
-      actionTimestamp: Date.now(),
-      // Include essential document info for easy reference
-      awdReferenceNumber: selectedDoc.awdReferenceNumber,
-      subject: selectedDoc.subject,
-      originatingOffice: selectedDoc.originatingOffice
-    };
-    
-    // Push creates a new entry with unique ID at the root level
-    await push(trackingRef, newTrackingEntry);
-
-    setSelectedDoc(null);
-    alert("Document successfully forwarded to Secretary!");
-  } catch (error) {
-    console.error("Error forwarding document:", error);
-  }
-};
   return (
     <ProtectedRoute allowedDivisions={['admin']}>
       <SidebarProvider>
@@ -265,7 +270,9 @@ export default function ReturnedDocuments() {
                           <TableCell className="truncate max-w-[120px]">{doc.awdReferenceNumber}</TableCell>
                           <TableCell className="truncate max-w-[200px]">{doc.subject}</TableCell>
                           <TableCell className="truncate max-w-[150px]">{doc.forwardedBy}</TableCell>
-                          <TableCell className="truncate max-w-[150px]">{doc.forwardedTo}</TableCell>
+                          <TableCell className="truncate max-w-[150px]">
+                            {doc.forwardedtoname ? `${doc.forwardedtoname} (${doc.forwardedTo})` : doc.forwardedTo}
+                          </TableCell>
                           <TableCell className="truncate max-w-[150px]">{doc.remarks}</TableCell>
                         </TableRow>
                       ))
@@ -345,12 +352,40 @@ export default function ReturnedDocuments() {
                     <p className="text-sm md:text-lg col-span-1 md:col-span-2"><strong>Remarks:</strong> {selectedDoc.remarks}</p>
                   </div>
 
-                  {/* Forward to Secretary Button */}
+                  {/* Route to Division Dropdown */}
+                  <div className="mt-4">
+                    <label className="block text-lg font-semibold mb-2">Route to Division:</label>
+                    <select
+                      value={selectedDivision}
+                      onChange={(e) => setSelectedDivision(e.target.value)}
+                      className="w-full border p-2 rounded mb-4"
+                    >
+                      <option value="" disabled>Select a division</option>
+                      <option value="CATCID Admin">CATCID Admin</option>
+                      <option value="GACID Admin">GACID Admin</option>
+                      <option value="EARD Admin">EARD Admin</option>
+                      <option value="MOCSU Admin">MOCSU Admin</option>
+                    </select>
+                  </div>
+
+                  {/* Forwarded To Name Input */}
+                  <div className="mt-2">
+                    <label className="block text-lg font-semibold mb-2">Forwarded To Name:</label>
+                    <Input
+                      type="text"
+                      placeholder="Enter forwarded to name"
+                      value={forwardedToName}
+                      onChange={(e) => setForwardedToName(e.target.value)}
+                      className="w-full border p-2 rounded"
+                    />
+                  </div>
+
                   <Button
                     className="w-full mt-4 md:mt-6 bg-blue-500 hover:bg-blue-600"
-                    onClick={handleForwardToSecretary}
+                    onClick={handleForwardToDivision}
+                    disabled={!selectedDivision}
                   >
-                    Forward to Secretary
+                    Forward to Division
                   </Button>
                 </div>
               )}

@@ -56,7 +56,8 @@ export default function DivisionDocs() {
   const [selectedDoc, setSelectedDoc] = useState<DocData | null>(null);
   const [assignedInspector, setAssignedInspector] = useState("");
   const [inspectors, setInspectors] = useState<{id: string, name: string}[]>([]);
-  
+  const [managerRemarks, setManagerRemarks] = useState("");
+
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
@@ -221,6 +222,7 @@ const calculateWorkingDays = (startDate: string, endDate: Date): number => {
     const startDateToUse = selectedDoc.startDate || selectedDoc.dateTimeSubmitted;
     const calculatedWorkingDays = calculateWorkingDays(startDateToUse, now);
 
+
     // Update the original document
     const docRef = ref(database, `documents/${selectedDoc.id}`);
     await update(docRef, {
@@ -233,6 +235,7 @@ const calculateWorkingDays = (startDate: string, endDate: Date): number => {
       workingDays: calculatedWorkingDays.toString(),
       startDate: startDateToUse // Keep the startDate in the document
     });
+
 
     // Create tracking record
     const trackingRef = ref(database, "tracking");
@@ -275,6 +278,118 @@ const calculateWorkingDays = (startDate: string, endDate: Date): number => {
     console.error("Error processing document:", error);
   }
 };
+
+const handleReturnDocument = async () => {
+  if (!selectedDoc) return;
+
+  try {
+    const userUID = localStorage.getItem("authToken");
+    if (!userUID) {
+      alert("User not authenticated.");
+      return;
+    }
+
+    let userName, userDivision;
+    const userRef = ref(database, `accounts/${userUID}`);
+    const userSnapshot = await get(userRef);
+    if (userSnapshot.exists()) {
+      const userData = userSnapshot.val();
+      userName = userData.name;
+      userDivision = userData.division;
+    } else {
+      alert("User details not found in the database.");
+      return;
+    }
+
+    const now = new Date();
+    const formattedReturnDate = now.toLocaleDateString("en-US", {
+      month: "2-digit",
+      day: "2-digit",
+      year: "numeric",
+    });
+
+    // Update the original document
+    const docRef = ref(database, `documents/${selectedDoc.id}`);
+    await update(docRef, {
+      status: "Returned",
+      remarks: "Returned to Originating Office",
+      forwardedBy: selectedDoc.forwardedTo,
+      forwardedTo: selectedDoc.originatingOffice,
+      returnDate: formattedReturnDate,
+    });
+
+    // Create a tracking record for the return
+    const trackingRef = ref(database, "tracking");
+    await push(trackingRef, {
+      id: selectedDoc.id,
+      awdReceivedDate: selectedDoc.awdReceivedDate,
+      awdReferenceNumber: selectedDoc.awdReferenceNumber,
+      subject: selectedDoc.subject,
+      dateOfDocument: selectedDoc.dateOfDocument,
+      deadline: selectedDoc.deadline,
+      fsisReferenceNumber: selectedDoc.fsisReferenceNumber,
+      originatingOffice: selectedDoc.originatingOffice,
+      forwardedBy: selectedDoc.forwardedTo,
+      forwardedTo: selectedDoc.originatingOffice,
+      remarks: "Returned to Originating Office",
+      status: "Returned",
+      returnDate: formattedReturnDate,
+      dateTimeSubmitted: selectedDoc.dateTimeSubmitted || new Date().toISOString(), // Add fallback for dateTimeSubmitted
+    });
+
+    setSelectedDoc(null);
+    alert("Document successfully returned!");
+  } catch (error) {
+    console.error("Error returning document:", error);
+  }
+};
+
+const handleManagersEndorsement = async () => {
+  if (!selectedDoc || !managerRemarks.trim()) return;
+
+  try {
+    const now = new Date();
+    const formattedDate = now.toLocaleDateString("en-US", {
+      month: "2-digit",
+      day: "2-digit",
+      year: "numeric",
+    });
+
+    // Update the original document
+    const docRef = ref(database, `documents/${selectedDoc.id}`);
+    await update(docRef, {
+      forwardedTo: "Secretary",
+      remarks: managerRemarks,
+      status: "For Manager's Endorsement",
+      endorsementDate: formattedDate,
+    });
+
+    // Create a tracking record for the endorsement
+    const trackingRef = ref(database, "tracking");
+    await push(trackingRef, {
+      id: selectedDoc.id,
+      awdReceivedDate: selectedDoc.awdReceivedDate,
+      awdReferenceNumber: selectedDoc.awdReferenceNumber,
+      subject: selectedDoc.subject,
+      dateOfDocument: selectedDoc.dateOfDocument,
+      deadline: selectedDoc.deadline,
+      fsisReferenceNumber: selectedDoc.fsisReferenceNumber,
+      originatingOffice: selectedDoc.originatingOffice,
+      forwardedBy: selectedDoc.forwardedTo,
+      forwardedTo: "Secretary",
+      remarks: managerRemarks,
+      status: "For Manager's Endorsement",
+      endorsementDate: formattedDate,
+    });
+
+    setSelectedDoc(null);
+    setManagerRemarks("");
+    alert("Document successfully forwarded for Manager's Endorsement!");
+  } catch (error) {
+    console.error("Error forwarding document for Manager's Endorsement:", error);
+  }
+};
+
   return (
     <ProtectedRoute allowedDivisions={['admin']}>
     <SidebarProvider>
@@ -420,7 +535,7 @@ const calculateWorkingDays = (startDate: string, endDate: Date): number => {
                   </div>
                 </div>
 
-                {/* Assign Inspector */}
+              
                {/* Assign Inspector */}
                 <div className="mt-4">
                   <label className="block text-lg font-semibold mb-2">Assign Inspector:</label>
@@ -571,6 +686,30 @@ const calculateWorkingDays = (startDate: string, endDate: Date): number => {
                   disabled={!assignedInspector}
                 >
                   Forward for Release
+                </Button>
+                <Button 
+                  className="w-full mt-6" 
+                  onClick={handleReturnDocument} 
+                  disabled={!selectedDoc}
+                >
+                  Return Document
+                </Button>
+                <div className="mt-4">
+                  <label className="block text-lg font-semibold mb-2">Manager's Remarks:</label>
+                  <Input
+                    type="text"
+                    placeholder="Enter remarks..."
+                    value={managerRemarks}
+                    onChange={(e) => setManagerRemarks(e.target.value)}
+                    className="w-full border p-2 rounded"
+                  />
+                </div>
+                <Button 
+                  className="w-full mt-6" 
+                  onClick={handleManagersEndorsement} 
+                  disabled={!managerRemarks.trim()}
+                >
+                  Forward for Manager's Endorsement
                 </Button>
               </div>
             )}
