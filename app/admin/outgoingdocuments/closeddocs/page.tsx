@@ -161,6 +161,28 @@ export default function ClosedDocuments() {
     }
   };
 
+  const copySelectedToClipboard = () => {
+    if (selectedRows.size === 0) return;
+
+    // Get all selected documents (including those not on current page)
+    const selectedDocs = documents.filter(doc => selectedRows.has(doc.id));
+    
+    // Create tab-separated rows without headers
+    const rows = selectedDocs.map(doc => [
+      doc.awdReferenceNumber,
+      doc.originatingOffice,
+      doc.subject,
+      doc.receivedBy || "Not received yet"
+    ].join("\t"));
+
+    const csvContent = rows.join("\n");
+
+    // Copy to clipboard
+    navigator.clipboard.writeText(csvContent)
+      .then(() => alert(`${selectedRows.size} documents copied to clipboard!`))
+      .catch(err => console.error("Failed to copy:", err));
+  };
+
   const selectAllMatching = () => {
     if (searchTerm.trim() === "") return;
     
@@ -238,6 +260,13 @@ export default function ClosedDocuments() {
                     disabled={!receiverName.trim() || isUpdating}
                   >
                     {isUpdating ? "Updating..." : "Mark as Received"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={copySelectedToClipboard}
+                    disabled={isUpdating}
+                  >
+                    Copy Selected
                   </Button>
                   <Button 
                     variant="ghost" 

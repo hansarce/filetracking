@@ -31,8 +31,8 @@ const data = {
           url: "/secretary/dashboard",
         },
         {
-          title: "Department",
-          url: "#",
+          title: "Division",
+          url: "/secretary/division",
         },
         {
           title: "Hold Documents",

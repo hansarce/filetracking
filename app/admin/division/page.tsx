@@ -280,7 +280,7 @@ const calculateWorkingDays = (startDate: string, endDate: Date): number => {
 };
 
 const handleReturnDocument = async () => {
-  if (!selectedDoc) return;
+  if (!selectedDoc || !managerRemarks.trim()) return;
 
   try {
     const userUID = localStorage.getItem("authToken");
@@ -312,7 +312,7 @@ const handleReturnDocument = async () => {
     const docRef = ref(database, `documents/${selectedDoc.id}`);
     await update(docRef, {
       status: "Returned",
-      remarks: "Returned to Originating Office",
+      remarks: managerRemarks,
       forwardedBy: selectedDoc.forwardedTo,
       forwardedTo: selectedDoc.originatingOffice,
       returnDate: formattedReturnDate,
@@ -331,13 +331,14 @@ const handleReturnDocument = async () => {
       originatingOffice: selectedDoc.originatingOffice,
       forwardedBy: selectedDoc.forwardedTo,
       forwardedTo: selectedDoc.originatingOffice,
-      remarks: "Returned to Originating Office",
+      remarks: managerRemarks,
       status: "Returned",
       returnDate: formattedReturnDate,
-      dateTimeSubmitted: selectedDoc.dateTimeSubmitted || new Date().toISOString(), // Add fallback for dateTimeSubmitted
+      dateTimeSubmitted: selectedDoc.dateTimeSubmitted || new Date().toISOString(),
     });
 
     setSelectedDoc(null);
+    setManagerRemarks("");
     alert("Document successfully returned!");
   } catch (error) {
     console.error("Error returning document:", error);
@@ -698,7 +699,7 @@ const handleManagersEndorsement = async () => {
                 <Button 
                   className="w-full mt-6" 
                   onClick={handleReturnDocument} 
-                  disabled={!selectedDoc}
+                  disabled={!selectedDoc || !managerRemarks.trim()}
                 >
                   Return Document
                 </Button>

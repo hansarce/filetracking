@@ -31,10 +31,6 @@ const data = {
           url: "/admin/dashboard",
         },
         {
-          title: "Hold Documents",
-          url: "/admin/Documents/holddocuments",
-        },
-        {
           title: "Division",
           url: "/admin/division",
         },
@@ -72,19 +68,20 @@ const data = {
           title: "Sent Documents",
           url: "/admin/Documents/sentdocs",
         },
+        {
+          title: "Pending Documents",
+          url: "/admin/outgoingdocuments/pendingdocs",
+        },
       ],
     },
     {
       title: "Outgoing Documents",
       items: [
         {
-          title: "Pending Documents",
-          url: "/admin/outgoingdocuments/pendingdocs",
-        },
-        {
           title: "Closed Documents",
           url: "/admin/outgoingdocuments/closeddocs",
         },
+        
         {
           title: "Returned Documents",
           url: "/admin/outgoingdocuments/returneddocs",
