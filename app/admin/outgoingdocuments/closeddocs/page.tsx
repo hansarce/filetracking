@@ -57,7 +57,7 @@ export default function ClosedDocuments() {
   const [filteredDocuments, setFilteredDocuments] = useState<DocData[]>([]);
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(10);
+  const [itemsPerPage] = useState(20);
   const [receiverName, setReceiverName] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [isUpdating, setIsUpdating] = useState(false);
@@ -281,7 +281,7 @@ export default function ClosedDocuments() {
                 </div>
               )}
 
-              <div className="overflow-x-auto">
+              <div className="">
                 <Table className="border w-full">
                   <TableHeader>
                     <TableRow className="bg-gray-100">
