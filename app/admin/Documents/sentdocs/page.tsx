@@ -35,7 +35,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { MoreVertical } from "lucide-react";
 import { database } from "@/lib/firebase/firebase";
-import { ref, onValue, remove, get, update } from "firebase/database";
+import { ref, onValue, get, update } from "firebase/database";
 import ProtectedRoute from '@/components/protected-route';
 
 export type docudata = {
@@ -54,23 +54,23 @@ const fetchDocuments = (setDocuments: React.Dispatch<React.SetStateAction<docuda
   onValue(dbRef, (snapshot) => {
     const data = snapshot.val();
     if (data) {
-      const seenAwdRefNums = new Set();
+      const seenAwdRefNums = new Set<string>();
       const transformedData: docudata[] = [];
 
-      Object.entries(data).forEach(([key, value]: [string, any]) => {
-        const awdRefNum = value.awdReferenceNumber || "N/A";
-        const forwardedBy = value.forwardedBy || "N/A";
+      Object.entries(data as Record<string, Record<string, unknown>>).forEach(([key, value]) => { // Explicitly cast data
+        const awdRefNum = value.awdReferenceNumber as string || "N/A";
+        const forwardedBy = value.forwardedBy as string || "N/A";
 
         if (forwardedBy.includes("Admin") && !seenAwdRefNums.has(awdRefNum)) {
           seenAwdRefNums.add(awdRefNum);
           transformedData.push({
             id: key,
-            datetime: value.dateTimeSubmitted || "N/A",
+            datetime: value.dateTimeSubmitted as string || "N/A",
             awdrefnu: awdRefNum,
-            subject: value.subject || "N/A",
-            workingDays: value.workingDays || "N/A",
-            startDate: value.startDate || value.dateTimeSubmitted || "N/A", // Use startDate if available
-            endDate: value.endDate || undefined
+            subject: value.subject as string || "N/A",
+            workingDays: value.workingDays as string || "N/A",
+            startDate: value.startDate as string || value.dateTimeSubmitted as string || "N/A",
+            endDate: value.endDate as string || undefined
           });
         }
       });
@@ -177,10 +177,10 @@ export default function SentDocs() {
     }
   };
 
-  const getUpdates = (snapshot: any, tableName: string, awdrefnu: string) => {
+  const getUpdates = (snapshot: import("firebase/database").DataSnapshot, tableName: string, awdrefnu: string) => {
     const updates: Record<string, null> = {};
-    snapshot.forEach((childSnapshot: any) => {
-      const doc = childSnapshot.val();
+    snapshot.forEach((childSnapshot: import("firebase/database").DataSnapshot) => {
+      const doc = childSnapshot.val() as Record<string, unknown>;
       if (doc.awdReferenceNumber === awdrefnu) {
         updates[`${tableName}/${childSnapshot.key}`] = null;
       }

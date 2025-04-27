@@ -20,12 +20,33 @@ import {
 } from "@/components/ui/breadcrumb";
 import ProtectedRoute from '@/components/protected-route';
 
+export type SubjectData = {
+  awdReferenceNumber: string;
+  originatingOffice: string;
+  dateOfDocument: string;
+  fsisReferenceNumber: string;
+  awdReceivedDate: string;
+  status: string;
+  remarks: string;
+  assignedInspector?: string;
+  subject?: string;
+};
+
+export type TrackingEntry = {
+  dateTimeSubmitted: string;
+  forwardedBy: string;
+  forwardedTo: string;
+  forwardedtoname?: string;
+  status: string;
+  remarks: string;
+};
+
 export default function SubjectInformation() {
   const params = useParams();
   const router = useRouter();
   const [awdrefnu, setAwdRefNu] = useState<string | null>(null);
-  const [subjectData, setSubjectData] = useState<any>(null);
-  const [trackingData, setTrackingData] = useState<any[]>([]);
+  const [subjectData, setSubjectData] = useState<SubjectData | null>(null);
+  const [trackingData, setTrackingData] = useState<TrackingEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {

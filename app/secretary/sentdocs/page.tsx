@@ -55,23 +55,24 @@ const fetchDocuments = (setDocuments: React.Dispatch<React.SetStateAction<docuda
       const seenAwdRefNums = new Set();
       const transformedData: docudata[] = [];
 
-      Object.entries(data).forEach(([key, value]: [string, any]) => {
-        const awdRefNum = value.awdReferenceNumber || "N/A";
-        const forwardedBy = value.forwardedBy || "N/A";
+      Object.entries(data).forEach(([key, value]) => {
+        const doc = value as Record<string, unknown>; // Explicitly cast value to Record<string, unknown>
+        const awdRefNum = doc.awdReferenceNumber as string || "N/A";
+        const forwardedBy = doc.forwardedBy as string || "N/A";
 
         if (forwardedBy.includes("Secretary") && !seenAwdRefNums.has(awdRefNum)) {
           seenAwdRefNums.add(awdRefNum);
 
           transformedData.push({
             id: key,
-            datetime: value.dateTimeSubmitted || "N/A",
+            datetime: doc.dateTimeSubmitted as string || "N/A",
             awdrefnu: awdRefNum,
-            subject: value.subject || "N/A",
-            origioffice: value.originatingOffice || "N/A",
-            fsisrefnum: value.fsisReferenceNumber || "N/A",
+            subject: doc.subject as string || "N/A",
+            origioffice: doc.originatingOffice as string || "N/A",
+            fsisrefnum: doc.fsisReferenceNumber as string || "N/A",
             forwardby: forwardedBy,
-            forwardto: value.forwardedTo || "N/A",
-            remarks: value.remarks || "N/A",
+            forwardto: doc.forwardedTo as string || "N/A",
+            remarks: doc.remarks as string || "N/A",
           });
         }
       });

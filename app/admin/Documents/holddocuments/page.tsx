@@ -80,7 +80,6 @@ const getDeadlineStatus = (dateTimeSubmitted: string, workingDays: string) => {
 
 export default function HoldDocuments() {
   const [search, setSearch] = useState("");
-  const [documents, setDocuments] = useState<DocData[]>([]);
   const [sortedDocuments, setSortedDocuments] = useState<DocData[]>([]);
   const [selectedDoc, setSelectedDoc] = useState<DocData | null>(null);
   const router = useRouter();
@@ -117,10 +116,8 @@ export default function HoldDocuments() {
             return extractAwdNumber(b.awdReferenceNumber) - extractAwdNumber(a.awdReferenceNumber);
           });
           
-          setDocuments(sorted);
           setSortedDocuments(sorted);
         } else {
-          setDocuments([]);
           setSortedDocuments([]);
         }
       } catch (error) {

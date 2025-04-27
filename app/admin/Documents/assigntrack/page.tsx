@@ -2,7 +2,7 @@
 import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { database, auth } from "@/lib/firebase/firebase";
-import { ref, push, get, set, onValue } from "firebase/database";
+import { ref, push, get } from "firebase/database";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -110,7 +110,7 @@ export default function AssignTrack() {
     const formattedSubject = formData.subject.toUpperCase();
 
     const calculateDeadline = (startDate: Date, workingDays: number): Date => {
-      let deadline = new Date(startDate);
+      const deadline = new Date(startDate);
       let daysAdded = 0;
 
       while (daysAdded < workingDays) {

@@ -144,7 +144,7 @@ export default function ClosedDocuments() {
     
     try {
       setIsUpdating(true);
-      const updates: Record<string, any> = {};
+      const updates: Record<string, string> = {};
       const timestamp = new Date().toLocaleString();
       
       Array.from(selectedRows).forEach(docId => {

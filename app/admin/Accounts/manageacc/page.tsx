@@ -32,7 +32,7 @@ import {
 } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { auth, database } from "@/lib/firebase/firebase";
+import { database } from "@/lib/firebase/firebase";
 import { ref, onValue, remove, update } from "firebase/database";
 import ProtectedRoute from '@/components/protected-route';
 

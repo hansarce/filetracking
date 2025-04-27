@@ -55,7 +55,6 @@ export default function PendingDocs() {
   const [documents, setDocuments] = useState<DocData[]>([]);
   const [selectedDoc, setSelectedDoc] = useState<DocData | null>(null);
   const [assignedInspector, setAssignedInspector] = useState("");
-  const [inspectors, setInspectors] = useState<{id: string, name: string}[]>([]);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -120,27 +119,6 @@ export default function PendingDocs() {
     return () => unsubscribe();
   }, []);
 
-  useEffect(() => {
-    const accountsRef = ref(database, "accounts");
-    const unsubscribe = onValue(accountsRef, (snapshot) => {
-      if (snapshot.exists()) {
-        const fetchedInspectors: {id: string, name: string}[] = [];
-        snapshot.forEach((childSnapshot) => {
-          const account = childSnapshot.val();
-          if (account.role === "Inspector") {
-            fetchedInspectors.push({
-              id: childSnapshot.key,
-              name: account.name
-            });
-          }
-        });
-        setInspectors(fetchedInspectors);
-      }
-    });
-
-    return () => unsubscribe();
-  }, []);
-
   // Calculate pagination
   const filteredDocuments = documents.filter(doc => {
     const searchTerm = search.toLowerCase();
@@ -195,15 +173,10 @@ export default function PendingDocs() {
         return;
       }
 
-      let userName, userDivision;
       const userRef = ref(database, `accounts/${userUID}`);
       
       const userSnapshot = await get(userRef);
-      if (userSnapshot.exists()) {
-        const userData = userSnapshot.val();
-        userName = userData.name;
-        userDivision = userData.division;
-      } else {
+      if (!userSnapshot.exists()) {
         alert("User details not found in the database.");
         return;
       }

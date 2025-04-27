@@ -24,8 +24,31 @@ export default function SubjectInformation() {
   const params = useParams();
   const router = useRouter();
   const [awdrefnu, setAwdRefNu] = useState<string | null>(null);
-  const [subjectData, setSubjectData] = useState<any>(null);
-  const [trackingData, setTrackingData] = useState<any[]>([]);
+
+  // Define specific types for subjectData and trackingData
+  type SubjectData = {
+    awdReferenceNumber?: string;
+    originatingOffice?: string;
+    dateOfDocument?: string;
+    fsisReferenceNumber?: string;
+    awdReceivedDate?: string;
+    status?: string;
+    remarks?: string;
+    assignedInspector?: string;
+    subject?: string;
+  };
+
+  type TrackingData = {
+    dateTimeSubmitted?: string;
+    forwardedBy?: string;
+    forwardedTo?: string;
+    forwardedtoname?: string;
+    status?: string;
+    remarks?: string;
+  };
+
+  const [subjectData, setSubjectData] = useState<SubjectData | null>(null); // Use SubjectData type
+  const [trackingData, setTrackingData] = useState<TrackingData[]>([]); // Use TrackingData type
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -52,7 +75,7 @@ export default function SubjectInformation() {
       if (snapshot.exists()) {
         const data = snapshot.val();
         const firstKey = Object.keys(data)[0];
-        setSubjectData(data[firstKey]);
+        setSubjectData(data[firstKey] as SubjectData); // Cast to SubjectData
       } else {
         console.warn("No data found for", awdrefnu);
         setSubjectData(null);
@@ -68,7 +91,7 @@ export default function SubjectInformation() {
     const unsubscribeTracking = onValue(trackingQuery, (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.val();
-        setTrackingData(Object.values(data));
+        setTrackingData(Object.values(data) as TrackingData[]); // Cast to TrackingData[]
       } else {
         console.warn("No tracking data found for", awdrefnu);
         setTrackingData([]);
@@ -145,7 +168,11 @@ export default function SubjectInformation() {
                         </thead>
                         <tbody>
                           {trackingData
-                            .sort((a, b) => new Date(a.dateTimeSubmitted).getTime() - new Date(b.dateTimeSubmitted).getTime())
+                            .sort((a, b) => {
+                              const dateA = a.dateTimeSubmitted ? new Date(a.dateTimeSubmitted).getTime() : 0; // Ensure value is defined
+                              const dateB = b.dateTimeSubmitted ? new Date(b.dateTimeSubmitted).getTime() : 0; // Ensure value is defined
+                              return dateA - dateB;
+                            })
                             .map((entry, index) => (
                               <tr key={index} className="border bg-white hover:bg-gray-50">
                                 <td className="border px-6 py-3 text-lg">{entry.dateTimeSubmitted || "N/A"}</td>

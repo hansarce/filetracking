@@ -28,7 +28,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 import { database } from "@/lib/firebase/firebase";
-import { ref, onValue, query, orderByChild, update } from "firebase/database";
+import { ref, onValue, update } from "firebase/database";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -161,7 +161,7 @@ const getDeadlineStatus = (startDate: string, workingDaysStr: string) => {
 
   // Calculate remaining working days between today and deadline
   const calculateRemainingWorkingDays = (from: Date, to: Date) => {
-    let current = new Date(from);
+    const current = new Date(from); // Changed 'let' to 'const'
     current.setDate(current.getDate() + 1); // Start counting from tomorrow
     let remainingDays = 0;
     
@@ -207,14 +207,6 @@ const getDeadlineStatus = (startDate: string, workingDaysStr: string) => {
   return { status: statusText, color: "green" };
 };
 
-// Helper function to format date as "MMM DD, YYYY"
-const formatDate = (date: Date) => {
-  return date.toLocaleDateString('en-US', { 
-    month: 'short', 
-    day: 'numeric', 
-    year: 'numeric' 
-  });
-};
   const handleEdit = (id: string) => {
     localStorage.setItem("selectedAwdRefNum", id);
     router.push("/admin/Documents/editaction");

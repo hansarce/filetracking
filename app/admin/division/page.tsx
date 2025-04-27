@@ -55,15 +55,11 @@ export default function DivisionDocs() {
   const [documents, setDocuments] = useState<DocData[]>([]);
   const [selectedDoc, setSelectedDoc] = useState<DocData | null>(null);
   const [assignedInspector, setAssignedInspector] = useState("");
-  const [inspectors, setInspectors] = useState<{id: string, name: string}[]>([]);
   const [managerRemarks, setManagerRemarks] = useState("");
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
-
-  // List of admin divisions to filter (exact matches only)
-  const divisionAdmins = ["CATCID Admin", "GACID Admin", "EARD Admin", "MOCSU Admin"];
 
   useEffect(() => {
     const docsRef = ref(database, "documents");
@@ -128,7 +124,6 @@ export default function DivisionDocs() {
             });
           }
         });
-        setInspectors(fetchedInspectors);
       }
     });
 
@@ -189,15 +184,9 @@ const calculateWorkingDays = (startDate: string, endDate: Date): number => {
       return;
     }
 
-    let userName, userDivision;
     const userRef = ref(database, `accounts/${userUID}`);
-    
     const userSnapshot = await get(userRef);
-    if (userSnapshot.exists()) {
-      const userData = userSnapshot.val();
-      userName = userData.name;
-      userDivision = userData.division;
-    } else {
+    if (!userSnapshot.exists()) {
       alert("User details not found in the database.");
       return;
     }
@@ -218,12 +207,9 @@ const calculateWorkingDays = (startDate: string, endDate: Date): number => {
       year: "numeric",
     });
 
-    // Use startDate if available, fall back to dateTimeSubmitted
     const startDateToUse = selectedDoc.startDate || selectedDoc.dateTimeSubmitted;
     const calculatedWorkingDays = calculateWorkingDays(startDateToUse, now);
 
-
-    // Update the original document
     const docRef = ref(database, `documents/${selectedDoc.id}`);
     await update(docRef, {
       assignedInspector,
@@ -233,11 +219,9 @@ const calculateWorkingDays = (startDate: string, endDate: Date): number => {
       forwardedTo: "Admin",
       endDate: formattedEndDate,
       workingDays: calculatedWorkingDays.toString(),
-      startDate: startDateToUse // Keep the startDate in the document
+      startDate: startDateToUse,
     });
 
-
-    // Create tracking record
     const trackingRef = ref(database, "tracking");
     await push(trackingRef, {
       id: selectedDoc.id,
@@ -256,10 +240,9 @@ const calculateWorkingDays = (startDate: string, endDate: Date): number => {
       assignedInspector,
       dateTimeSubmitted,
       endDate: formattedEndDate,
-      startDate: startDateToUse // Include startDate in tracking
+      startDate: startDateToUse,
     });
     
-    // Store in mandays table
     const mandaysRef = ref(database, "mandays");
     await push(mandaysRef, {
       awdReferenceNumber: selectedDoc.awdReferenceNumber,
@@ -289,14 +272,9 @@ const handleReturnDocument = async () => {
       return;
     }
 
-    let userName, userDivision;
     const userRef = ref(database, `accounts/${userUID}`);
     const userSnapshot = await get(userRef);
-    if (userSnapshot.exists()) {
-      const userData = userSnapshot.val();
-      userName = userData.name;
-      userDivision = userData.division;
-    } else {
+    if (!userSnapshot.exists()) {
       alert("User details not found in the database.");
       return;
     }
@@ -308,7 +286,6 @@ const handleReturnDocument = async () => {
       year: "numeric",
     });
 
-    // Update the original document
     const docRef = ref(database, `documents/${selectedDoc.id}`);
     await update(docRef, {
       status: "Returned",
@@ -318,7 +295,6 @@ const handleReturnDocument = async () => {
       returnDate: formattedReturnDate,
     });
 
-    // Create a tracking record for the return
     const trackingRef = ref(database, "tracking");
     await push(trackingRef, {
       id: selectedDoc.id,
@@ -334,7 +310,7 @@ const handleReturnDocument = async () => {
       remarks: "Returned to Originating Office",
       status: "Returned",
       returnDate: formattedReturnDate,
-      dateTimeSubmitted: selectedDoc.dateTimeSubmitted || new Date().toISOString(), // Add fallback for dateTimeSubmitted
+      dateTimeSubmitted: selectedDoc.dateTimeSubmitted || new Date().toISOString(),
     });
 
     setSelectedDoc(null);

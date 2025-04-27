@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, LineChart, Line, PieChart, Pie, Cell } from "recharts";
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,  PieChart, Pie, Cell } from "recharts";
 import ProtectedRoute from '@/components/protected-route';
 type MandayRecord = {
   id: string;
@@ -221,7 +221,7 @@ export default function MandaysDashboard() {
                   <Card>
                     <CardHeader>
                       <CardTitle>Daily Efficiency</CardTitle>
-                      <CardDescription>Today's performance</CardDescription>
+                      <CardDescription>Today&apos;s performance</CardDescription>
                     </CardHeader>
                     <CardContent>
                       <div className="text-2xl font-bold">
@@ -238,7 +238,7 @@ export default function MandaysDashboard() {
                   <Card>
                     <CardHeader>
                       <CardTitle>Weekly Efficiency</CardTitle>
-                      <CardDescription>This week's performance</CardDescription>
+                      <CardDescription>This week&apos;s performance</CardDescription>
                     </CardHeader>
                     <CardContent>
                       <div className="text-2xl font-bold">
@@ -255,7 +255,7 @@ export default function MandaysDashboard() {
                   <Card>
                     <CardHeader>
                       <CardTitle>Monthly Efficiency</CardTitle>
-                      <CardDescription>This month's performance</CardDescription>
+                      <CardDescription>This month&apos;s performance</CardDescription>
                     </CardHeader>
                     <CardContent>
                       <div className="text-2xl font-bold">
