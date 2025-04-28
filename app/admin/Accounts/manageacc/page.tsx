@@ -1,7 +1,7 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { auth, database } from "@/lib/firebase/firebase";
+import { database } from "@/lib/firebase/firebase";
 import { ref, onValue, remove } from "firebase/database";
 import { AppSidebar } from "@/components/app-sidebar";
 import {
