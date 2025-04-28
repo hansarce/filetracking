@@ -1,4 +1,5 @@
 "use client";
+import Head from "next/head";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -69,67 +70,73 @@ export function LoginForm({
   };
 
   return (
-    <div 
-      className="flex items-center justify-center min-h-screen"
-      style={{
-        backgroundImage: "url('/images/airworthinessbg.png')",
-        backgroundSize: "cover",
-        backgroundPosition: "center",
-        backgroundRepeat: "no-repeat",
-        backgroundAttachment: "fixed",
-      }}
-    >
-      <div className={cn("flex flex-col gap-6", className)} {...props}>
-        <Card className="bg-black w-[403px] h-[450px]">
-          <CardHeader className="pt-10">
-            <div className="flex flex-col items-center justify-center text-center">
-              <CardTitle className="text-2xl text-white">Login</CardTitle>
-              <CardDescription className="text-white pt-2">
-                Enter your email and password below
-              </CardDescription>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="flex flex-col gap-6">
-              <div className="grid gap-2">
-                <Label className="text-white text-md" htmlFor="email">
-                  Email
-                </Label>
-                <Input
-                  className="text-white"
-                  id="email"
-                  type="email"
-                  placeholder="m@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                />
+    <>
+      <Head>
+        <title>Airworthiness</title>
+        <link rel="icon" href="/images/awdlogo.png" />
+      </Head>
+      <div 
+        className="flex items-center justify-center min-h-screen"
+        style={{
+          backgroundImage: "url('/images/airworthinessbg.png')",
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+          backgroundRepeat: "no-repeat",
+          backgroundAttachment: "fixed",
+        }}
+      >
+        <div className={cn("flex flex-col gap-6", className)} {...props}>
+          <Card className="bg-black w-[403px] h-[450px]">
+            <CardHeader className="pt-10">
+              <div className="flex flex-col items-center justify-center text-center">
+                <CardTitle className="text-2xl text-white">Login</CardTitle>
+                <CardDescription className="text-white pt-2">
+                  Enter your email and password below
+                </CardDescription>
               </div>
-              <div className="grid gap-2">
-                <Label className="text-white text-md" htmlFor="password">
-                  Password
-                </Label>
-                <Input
-                  className="text-white"
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                />
-              </div>
-              {error && <p className="text-red-500 text-sm">{error}</p>}
-              <Button 
-                type="submit" 
-                className="w-full bg-white text-black" 
-                disabled={loading}
-              >
-                {loading ? "Logging in..." : "Login"}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleSubmit} className="flex flex-col gap-6">
+                <div className="grid gap-2">
+                  <Label className="text-white text-md" htmlFor="email">
+                    Email
+                  </Label>
+                  <Input
+                    className="text-white"
+                    id="email"
+                    type="email"
+                    placeholder="m@example.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label className="text-white text-md" htmlFor="password">
+                    Password
+                  </Label>
+                  <Input
+                    className="text-white"
+                    id="password"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                  />
+                </div>
+                {error && <p className="text-red-500 text-sm">{error}</p>}
+                <Button 
+                  type="submit" 
+                  className="w-full bg-white text-black" 
+                  disabled={loading}
+                >
+                  {loading ? "Logging in..." : "Login"}
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+        </div>
       </div>
-    </div>
+    </>
   );
 }
