@@ -73,9 +73,10 @@ export default function ManageAccounts() {
     return () => unsubscribe();
   }, []);
 
-  const handleEdit = (accountId: string) => {
-    router.push(`/admin/Accounts/editacc/${accountId}`);
-  };
+ const handleEdit = (accountId: string) => {
+  localStorage.setItem('currentAccountId', accountId);
+  router.push("/admin/Accounts/editacc");
+};
 
   const handleDeleteClick = (accountId: string) => {
     setAccountToDelete(accountId);
