@@ -1,8 +1,8 @@
 "use client";
 import { useRouter, useParams } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { database, auth } from "@/lib/firebase/firebase";
-import { ref, get, update, query, orderByChild, equalTo, onValue } from "firebase/database";
+import { ref, get, update } from "firebase/database";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -11,6 +11,7 @@ import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/s
 import { Separator } from "@/components/ui/separator";
 import { Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb";
 import ProtectedRoute from '@/components/protected-route';
+
 export default function EditInformation() {
   const [formData, setFormData] = useState({
     originatingOffice: "",
@@ -27,59 +28,10 @@ export default function EditInformation() {
   const params = useParams();
   const router = useRouter();
   const [admin, setAdmin] = useState<{ name: string; role: string } | null>(null);
-  const [awdReferenceNumber, setAwdReferenceNumber] = useState("");
   const [documentId, setDocumentId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Get the awdrefnu parameter from the URL
-  useEffect(() => {
-    const storedAwdRef = localStorage.getItem("selectedAwdRefNum");
-    const routeParams = params as { awdrefnu?: string };
-    const awdrefnuFromRoute = routeParams.awdrefnu;
-    
-    // Fallback to search parameters if needed
-    let awdrefnuFromSearch = null;
-    if (typeof window !== "undefined") {
-      const searchParams = new URLSearchParams(window.location.search);
-      awdrefnuFromSearch = searchParams.get("awdrefnu");
-    }
-    
-    // Set the document ID from either source
-    const finalAwdRefnu = awdrefnuFromRoute || awdrefnuFromSearch;
-    
-    if (finalAwdRefnu) {
-      setDocumentId(finalAwdRefnu);
-    } else {
-      // Final fallback to localStorage
-      if (storedAwdRef) {
-        setDocumentId(storedAwdRef);
-      }
-    }
-  }, [params]);
-
-  // Auth state listener and data fetching
-  useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged(async (user) => {
-      if (user) {
-        await fetchAdminInfo(user.uid);
-        
-        if (documentId) {
-          console.log("Fetching data for:", documentId);
-          await fetchDocumentData(documentId);
-        } else {
-          console.warn("No AWD reference number found");
-          setLoading(false);
-        }
-      } else {
-        // Handle not authenticated
-        router.push("/login");
-      }
-    });
-    
-    return () => unsubscribe();
-  }, [documentId, router]);
-
-  const fetchAdminInfo = async (uid: string) => {
+  const fetchAdminInfo = useCallback(async (uid: string) => {
     try {
       const userRef = ref(database, `accounts/${uid}`);
       const snapshot = await get(userRef);
@@ -92,12 +44,10 @@ export default function EditInformation() {
     } catch (error) {
       console.error("Error fetching admin info:", error);
     }
-  };
+  }, []);
 
-  // Fetch document data by ID
-  const fetchDocumentData = async (id: string) => {
+  const fetchDocumentData = useCallback(async (id: string) => {
     try {
-      // Try to fetch from documents node first
       const docRef = ref(database, `documents/${id}`);
       const snapshot = await get(docRef);
 
@@ -115,12 +65,10 @@ export default function EditInformation() {
           status: docData.status || "Open",
           workingDays: docData.workingDays || "3",
         });
-        setAwdReferenceNumber(docData.awdReferenceNumber || id);
       } else {
-        // If not found in documents, try tracking node
         const trackRef = ref(database, `tracking/${id}`);
         const trackSnapshot = await get(trackRef);
-        
+
         if (trackSnapshot.exists()) {
           const trackData = trackSnapshot.val();
           setFormData({
@@ -135,7 +83,6 @@ export default function EditInformation() {
             status: trackData.status || "Open",
             workingDays: trackData.workingDays || "3",
           });
-          setAwdReferenceNumber(trackData.awdReferenceNumber || id);
         } else {
           console.warn("Document not found in either location.");
           alert("Document not found. Redirecting back to sent documents.");
@@ -148,79 +95,49 @@ export default function EditInformation() {
       alert("Error loading document data. Please try again.");
       setLoading(false);
     }
-  };
+  }, [router]);
 
-  // Alternative fetch method using query and onValue
-  const fetchDocumentDataByQuery = (awdrefnu: string) => {
-    setLoading(true);
-    console.log("Fetching data for:", awdrefnu);
+  useEffect(() => {
+    const storedAwdRef = localStorage.getItem("selectedAwdRefNum");
+    const routeParams = params as { awdrefnu?: string };
+    const awdrefnuFromRoute = routeParams.awdrefnu;
     
-    const docQuery = query(ref(database, "documents"), orderByChild("awdReferenceNumber"), equalTo(awdrefnu));
+    let awdrefnuFromSearch = null;
+    if (typeof window !== "undefined") {
+      const searchParams = new URLSearchParams(window.location.search);
+      awdrefnuFromSearch = searchParams.get("awdrefnu");
+    }
     
-    // Using onValue for real-time updates
-    const unsubscribeDoc = onValue(docQuery, (snapshot) => {
-      if (snapshot.exists()) {
-        const data = snapshot.val();
-        const firstKey = Object.keys(data)[0];
-        const docData = data[firstKey];
-        
-        setFormData({
-          originatingOffice: docData.originatingOffice || "",
-          subject: docData.subject || "",
-          dateOfDocument: docData.dateOfDocument || "",
-          fsisReferenceNumber: docData.fsisReferenceNumber || "",
-          awdReceivedDate: docData.awdReceivedDate || "",
-          forwardedBy: docData.forwardedBy || "",
-          forwardedTo: docData.forwardedTo || "",
-          remarks: docData.remarks || "",
-          status: docData.status || "Open",
-          workingDays: docData.workingDays || "3",
-        });
-        setAwdReferenceNumber(docData.awdReferenceNumber || awdrefnu);
-      } else {
-        console.warn("No data found for", awdrefnu);
-        
-        // Try tracking as fallback
-        const trackQuery = query(ref(database, "tracking"), orderByChild("awdReferenceNumber"), equalTo(awdrefnu));
-        onValue(trackQuery, (trackSnapshot) => {
-          if (trackSnapshot.exists()) {
-            const trackData = trackSnapshot.val();
-            const firstKey = Object.keys(trackData)[0];
-            const docData = trackData[firstKey];
-            
-            setFormData({
-              originatingOffice: docData.originatingOffice || "",
-              subject: docData.subject || "",
-              dateOfDocument: docData.dateOfDocument || "",
-              fsisReferenceNumber: docData.fsisReferenceNumber || "",
-              awdReceivedDate: docData.awdReceivedDate || "",
-              forwardedBy: docData.forwardedBy || "",
-              forwardedTo: docData.forwardedTo || "",
-              remarks: docData.remarks || "",
-              status: docData.status || "Open",
-              workingDays: docData.workingDays || "3",
-            });
-            setAwdReferenceNumber(docData.awdReferenceNumber || awdrefnu);
-          } else {
-            console.warn("Document not found in either location.");
-            alert("Document not found. Redirecting back to sent documents.");
-            router.push("/admin/Documents/sentdocs");
-          }
-          setLoading(false);
-        }, (error) => {
-          console.error("Error fetching tracking data:", error);
-          setLoading(false);
-        });
+    const finalAwdRefnu = awdrefnuFromRoute || awdrefnuFromSearch;
+    
+    if (finalAwdRefnu) {
+      setDocumentId(finalAwdRefnu);
+    } else {
+      if (storedAwdRef) {
+        setDocumentId(storedAwdRef);
       }
-      setLoading(false);
-    }, (error) => {
-      console.error("Error fetching data:", error);
-      setLoading(false);
+    }
+  }, [params]);
+
+  useEffect(() => {
+    const unsubscribe = auth.onAuthStateChanged(async (user) => {
+      if (user) {
+        await fetchAdminInfo(user.uid);
+        
+        if (documentId) {
+          console.log("Fetching data for:", documentId);
+          await fetchDocumentData(documentId);
+        } else {
+          console.warn("No AWD reference number found");
+          setLoading(false);
+        }
+      } else {
+        router.push("/login");
+      }
     });
     
-    // Return unsubscribe function
-    return unsubscribeDoc;
-  };
+    return () => unsubscribe();
+  }, [documentId, router, fetchAdminInfo, fetchDocumentData]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -233,7 +150,6 @@ export default function EditInformation() {
       return;
     }
 
-    // Convert Originating Office and Subject to uppercase
     const formattedOriginatingOffice = formData.originatingOffice.toUpperCase();
     const formattedSubject = formData.subject.toUpperCase();
 
@@ -242,10 +158,9 @@ export default function EditInformation() {
         ...formData,
         originatingOffice: formattedOriginatingOffice,
         subject: formattedSubject,
-        awdReferenceNumber: documentId, // Ensure the AWD reference number is preserved
+        awdReferenceNumber: documentId,
       };
 
-      // Update the document in both Firebase locations
       await update(ref(database, `documents/${documentId}`), updatedData);
       await update(ref(database, `tracking/${documentId}`), updatedData);
 

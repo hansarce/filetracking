@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { database } from "@/lib/firebase/firebase";
-import { ref, onValue, update, push, get } from "firebase/database";
+import { ref, onValue, update, push } from "firebase/database";
 import { AppSidebarSecretary } from "@/components/app-sidebar-sec";
 import {
   SidebarInset,

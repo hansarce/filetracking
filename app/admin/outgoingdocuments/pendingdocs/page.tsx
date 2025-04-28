@@ -55,7 +55,6 @@ export default function PendingDocs() {
   const [documents, setDocuments] = useState<DocData[]>([]);
   const [selectedDoc, setSelectedDoc] = useState<DocData | null>(null);
   const [assignedInspector, setAssignedInspector] = useState("");
-  const [inspectors, setInspectors] = useState<{id: string, name: string}[]>([]);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -120,27 +119,6 @@ export default function PendingDocs() {
     return () => unsubscribe();
   }, []);
 
-  useEffect(() => {
-    const accountsRef = ref(database, "accounts");
-    const unsubscribe = onValue(accountsRef, (snapshot) => {
-      if (snapshot.exists()) {
-        const fetchedInspectors: {id: string, name: string}[] = [];
-        snapshot.forEach((childSnapshot) => {
-          const account = childSnapshot.val();
-          if (account.role === "Inspector") {
-            fetchedInspectors.push({
-              id: childSnapshot.key,
-              name: account.name
-            });
-          }
-        });
-        setInspectors(fetchedInspectors);
-      }
-    });
-
-    return () => unsubscribe();
-  }, []);
-
   // Calculate pagination
   const filteredDocuments = documents.filter(doc => {
     const searchTerm = search.toLowerCase();
@@ -187,7 +165,7 @@ export default function PendingDocs() {
 
   const handleForwardForRelease = async () => {
     if (!selectedDoc || !assignedInspector) return;
-    
+
     try {
       const userUID = localStorage.getItem("authToken");
       if (!userUID) {
@@ -195,15 +173,9 @@ export default function PendingDocs() {
         return;
       }
 
-      let userName, userDivision;
       const userRef = ref(database, `accounts/${userUID}`);
-      
       const userSnapshot = await get(userRef);
-      if (userSnapshot.exists()) {
-        const userData = userSnapshot.val();
-        userName = userData.name;
-        userDivision = userData.division;
-      } else {
+      if (!userSnapshot.exists()) {
         alert("User details not found in the database.");
         return;
       }
@@ -227,7 +199,6 @@ export default function PendingDocs() {
       const startDateToUse = selectedDoc.startDate || selectedDoc.dateTimeSubmitted;
       const calculatedWorkingDays = calculateWorkingDays(startDateToUse, now);
 
-      // Update the original document
       const docRef = ref(database, `documents/${selectedDoc.id}`);
       await update(docRef, {
         assignedInspector,
@@ -237,10 +208,9 @@ export default function PendingDocs() {
         forwardedTo: "Admin",
         endDate: formattedEndDate,
         workingDays: calculatedWorkingDays.toString(),
-        startDate: startDateToUse
+        startDate: startDateToUse,
       });
 
-      // Create tracking record
       const trackingRef = ref(database, "tracking");
       await push(trackingRef, {
         id: selectedDoc.id,
@@ -259,17 +229,16 @@ export default function PendingDocs() {
         assignedInspector,
         dateTimeSubmitted,
         endDate: formattedEndDate,
-        startDate: startDateToUse
+        startDate: startDateToUse,
       });
-      
-      // Store in mandays table
+
       const mandaysRef = ref(database, "mandays");
       await push(mandaysRef, {
         awdReferenceNumber: selectedDoc.awdReferenceNumber,
         originalWorkingDays: selectedDoc.workingDays,
         actualWorkingDays: calculatedWorkingDays,
         inspectorName: assignedInspector,
-        startDate: startDateToUse, 
+        startDate: startDateToUse,
         endDate: formattedEndDate,
         dateRecorded: now.toISOString(),
       });

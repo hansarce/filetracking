@@ -24,8 +24,8 @@ export default function SubjectInformation() {
   const params = useParams();
   const router = useRouter();
   const [awdrefnu, setAwdRefNu] = useState<string | null>(null);
-  const [subjectData, setSubjectData] = useState<any>(null);
-  const [trackingData, setTrackingData] = useState<any[]>([]);
+  const [subjectData, setSubjectData] = useState<Record<string, unknown> | null>(null);
+  const [trackingData, setTrackingData] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -108,21 +108,21 @@ export default function SubjectInformation() {
               </Breadcrumb>
             </header>
             <div className="flex-1 overflow-y-auto pl-12 pt-8 w-full">
-              <h1 className="text-6xl font-bold mb-16">{subjectData.subject || "No Title"}</h1>
+              <h1 className="text-6xl font-bold mb-16">{String(subjectData?.subject || "No Title")}</h1>
               <div className="grid grid-cols-2 gap-6 pl-12">
-                {[ 
-                  { label: "AWD Reference Number", value: subjectData.awdReferenceNumber },
-                  { label: "Originating Officer", value: subjectData.originatingOffice },
-                  { label: "Date of Document", value: subjectData.dateOfDocument },
-                  { label: "FSIS Reference Number", value: subjectData.fsisReferenceNumber },
-                  { label: "AWD Date Received", value: subjectData.awdReceivedDate },
-                  { label: "Status", value: subjectData.status },
-                  { label: "Remarks", value: subjectData.remarks },
-                  { label: "Inspector", value: subjectData.assignedInspector },
+                {[
+                  { label: "AWD Reference Number", value: String(subjectData?.awdReferenceNumber || "N/A") },
+                  { label: "Originating Officer", value: String(subjectData?.originatingOffice || "N/A") },
+                  { label: "Date of Document", value: String(subjectData?.dateOfDocument || "N/A") },
+                  { label: "FSIS Reference Number", value: String(subjectData?.fsisReferenceNumber || "N/A") },
+                  { label: "AWD Date Received", value: String(subjectData?.awdReceivedDate || "N/A") },
+                  { label: "Status", value: String(subjectData?.status || "N/A") },
+                  { label: "Remarks", value: String(subjectData?.remarks || "N/A") },
+                  { label: "Inspector", value: String(subjectData?.assignedInspector || "N/A") },
                 ].map((item, index) => (
                   <div key={index}>
                     <label className="block text-xl font-semibold pb-2">{item.label}</label>
-                    <label className="block text-xl font-normal pb-2">{item.value || "N/A"}</label>
+                    <label className="block text-xl font-normal pb-2">{item.value}</label>
                   </div>
                 ))}
               </div>
@@ -146,13 +146,15 @@ export default function SubjectInformation() {
                         <tbody>
                           {trackingData.map((entry, index) => (
                             <tr key={index} className="border bg-white hover:bg-gray-50">
-                              <td className="border px-6 py-3 text-lg">{entry.dateTimeSubmitted || "N/A"}</td>
-                              <td className="border px-6 py-3 text-lg">{entry.forwardedBy || "N/A"}</td>
+                              <td className="border px-6 py-3 text-lg">{String(entry.dateTimeSubmitted || "N/A")}</td>
+                              <td className="border px-6 py-3 text-lg">{String(entry.forwardedBy || "N/A")}</td>
                               <td className="border px-6 py-3 text-lg">
-                                {entry.forwardedtoname ? `${entry.forwardedtoname} (${entry.forwardedTo || ''})` : entry.forwardedTo || "N/A"}
+                                {entry.forwardedtoname 
+                                  ? `${String(entry.forwardedtoname)} (${String(entry.forwardedTo || '')})` 
+                                  : String(entry.forwardedTo || "N/A")}
                               </td>
-                              <td className="border px-6 py-3 text-lg">{entry.status || "N/A"}</td>
-                              <td className="border px-6 py-3 text-lg">{entry.remarks || "N/A"}</td>
+                              <td className="border px-6 py-3 text-lg">{String(entry.status || "N/A")}</td>
+                              <td className="border px-6 py-3 text-lg">{String(entry.remarks || "N/A")}</td>
                             </tr>
                           ))}
                         </tbody>

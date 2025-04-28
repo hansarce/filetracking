@@ -55,15 +55,11 @@ export default function DivisionDocs() {
   const [documents, setDocuments] = useState<DocData[]>([]);
   const [selectedDoc, setSelectedDoc] = useState<DocData | null>(null);
   const [assignedInspector, setAssignedInspector] = useState("");
-  const [inspectors, setInspectors] = useState<{id: string, name: string}[]>([]);
   const [managerRemarks, setManagerRemarks] = useState("");
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
-
-  // List of admin divisions to filter (exact matches only)
-  const divisionAdmins = ["CATCID Admin", "GACID Admin", "EARD Admin", "MOCSU Admin"];
 
   useEffect(() => {
     const docsRef = ref(database, "documents");
@@ -97,7 +93,7 @@ export default function DivisionDocs() {
                 assignedInspector: doc.assignedInspector || "",
                 dateTimeSubmitted: doc.dateTimeSubmitted || new Date().toISOString(),
                 endDate: doc.endDate || "",
-                startDate: doc.startDate || doc.dateTimeSubmitted || new Date().toISOString() // Add this line
+                startDate: doc.startDate || doc.dateTimeSubmitted || new Date().toISOString()
               });
             }
           });
@@ -108,27 +104,6 @@ export default function DivisionDocs() {
         }
       } catch (error) {
         console.error("Error processing documents:", error);
-      }
-    });
-
-    return () => unsubscribe();
-  }, []);
-
-  useEffect(() => {
-    const accountsRef = ref(database, "accounts");
-    const unsubscribe = onValue(accountsRef, (snapshot) => {
-      if (snapshot.exists()) {
-        const fetchedInspectors: {id: string, name: string}[] = [];
-        snapshot.forEach((childSnapshot) => {
-          const account = childSnapshot.val();
-          if (account.role === "Inspector") {
-            fetchedInspectors.push({
-              id: childSnapshot.key,
-              name: account.name
-            });
-          }
-        });
-        setInspectors(fetchedInspectors);
       }
     });
 
@@ -180,223 +155,199 @@ const calculateWorkingDays = (startDate: string, endDate: Date): number => {
 };
 
   const handleForwardForRelease = async () => {
-  if (!selectedDoc || !assignedInspector) return;
-  
-  try {
-    const userUID = localStorage.getItem("authToken");
-    if (!userUID) {
-      alert("User not authenticated.");
-      return;
+    if (!selectedDoc || !assignedInspector) return;
+
+    try {
+      const userUID = localStorage.getItem("authToken");
+      if (!userUID) {
+        alert("User not authenticated.");
+        return;
+      }
+
+      const userRef = ref(database, `accounts/${userUID}`);
+      const userSnapshot = await get(userRef);
+      if (!userSnapshot.exists()) {
+        alert("User details not found in the database.");
+        return;
+      }
+
+      const now = new Date();
+      const dateTimeSubmitted = now.toLocaleString("en-US", {
+        month: "2-digit",
+        day: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+      });
+
+      const formattedEndDate = now.toLocaleDateString("en-US", {
+        month: "2-digit",
+        day: "2-digit",
+        year: "numeric",
+      });
+
+      const startDateToUse = selectedDoc.startDate || selectedDoc.dateTimeSubmitted;
+      const calculatedWorkingDays = calculateWorkingDays(startDateToUse, now);
+
+      const docRef = ref(database, `documents/${selectedDoc.id}`);
+      await update(docRef, {
+        assignedInspector,
+        status: "Closed",
+        remarks: "For Release",
+        forwardedBy: selectedDoc.forwardedTo,
+        forwardedTo: "Admin",
+        endDate: formattedEndDate,
+        workingDays: calculatedWorkingDays.toString(),
+        startDate: startDateToUse,
+      });
+
+      const trackingRef = ref(database, "tracking");
+      await push(trackingRef, {
+        id: selectedDoc.id,
+        awdReceivedDate: selectedDoc.awdReceivedDate,
+        awdReferenceNumber: selectedDoc.awdReferenceNumber,
+        subject: selectedDoc.subject,
+        dateOfDocument: selectedDoc.dateOfDocument,
+        deadline: selectedDoc.deadline,
+        fsisReferenceNumber: selectedDoc.fsisReferenceNumber,
+        originatingOffice: selectedDoc.originatingOffice,
+        forwardedBy: selectedDoc.forwardedTo,
+        forwardedTo: "Admin",
+        remarks: "For Release",
+        status: "Closed",
+        workingDays: calculatedWorkingDays.toString(),
+        assignedInspector,
+        dateTimeSubmitted,
+        endDate: formattedEndDate,
+        startDate: startDateToUse,
+      });
+
+      const mandaysRef = ref(database, "mandays");
+      await push(mandaysRef, {
+        awdReferenceNumber: selectedDoc.awdReferenceNumber,
+        originalWorkingDays: selectedDoc.workingDays,
+        actualWorkingDays: calculatedWorkingDays,
+        inspectorName: assignedInspector,
+        startDate: startDateToUse,
+        endDate: formattedEndDate,
+        dateRecorded: now.toISOString(),
+      });
+
+      setSelectedDoc(null);
+      setAssignedInspector("");
+      alert("Document successfully forwarded for release!");
+    } catch (error) {
+      console.error("Error processing document:", error);
     }
+  };
 
-    let userName, userDivision;
-    const userRef = ref(database, `accounts/${userUID}`);
-    
-    const userSnapshot = await get(userRef);
-    if (userSnapshot.exists()) {
-      const userData = userSnapshot.val();
-      userName = userData.name;
-      userDivision = userData.division;
-    } else {
-      alert("User details not found in the database.");
-      return;
+  const handleReturnDocument = async () => {
+    if (!selectedDoc) return;
+
+    try {
+      const userUID = localStorage.getItem("authToken");
+      if (!userUID) {
+        alert("User not authenticated.");
+        return;
+      }
+
+      const userRef = ref(database, `accounts/${userUID}`);
+      const userSnapshot = await get(userRef);
+      if (!userSnapshot.exists()) {
+        alert("User details not found in the database.");
+        return;
+      }
+
+      const now = new Date();
+      const formattedReturnDate = now.toLocaleDateString("en-US", {
+        month: "2-digit",
+        day: "2-digit",
+        year: "numeric",
+      });
+
+      const docRef = ref(database, `documents/${selectedDoc.id}`);
+      await update(docRef, {
+        status: "Returned",
+        remarks: "Returned to Originating Office",
+        forwardedBy: selectedDoc.forwardedTo,
+        forwardedTo: selectedDoc.originatingOffice,
+        returnDate: formattedReturnDate,
+      });
+
+      const trackingRef = ref(database, "tracking");
+      await push(trackingRef, {
+        id: selectedDoc.id,
+        awdReceivedDate: selectedDoc.awdReceivedDate,
+        awdReferenceNumber: selectedDoc.awdReferenceNumber,
+        subject: selectedDoc.subject,
+        dateOfDocument: selectedDoc.dateOfDocument,
+        deadline: selectedDoc.deadline,
+        fsisReferenceNumber: selectedDoc.fsisReferenceNumber,
+        originatingOffice: selectedDoc.originatingOffice,
+        forwardedBy: selectedDoc.forwardedTo,
+        forwardedTo: selectedDoc.originatingOffice,
+        remarks: "Returned to Originating Office",
+        status: "Returned",
+        returnDate: formattedReturnDate,
+        dateTimeSubmitted: selectedDoc.dateTimeSubmitted || new Date().toISOString(),
+      });
+
+      setSelectedDoc(null);
+      alert("Document successfully returned!");
+    } catch (error) {
+      console.error("Error returning document:", error);
     }
+  };
 
-    const now = new Date();
-    const dateTimeSubmitted = now.toLocaleString("en-US", {
-      month: "2-digit",
-      day: "2-digit",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
-    });
+  const handleManagersEndorsement = async () => {
+    if (!selectedDoc || !managerRemarks.trim()) return;
 
-    const formattedEndDate = now.toLocaleDateString("en-US", {
-      month: "2-digit",
-      day: "2-digit",
-      year: "numeric",
-    });
+    try {
+      const now = new Date();
+      const formattedDate = now.toLocaleDateString("en-US", {
+        month: "2-digit",
+        day: "2-digit",
+        year: "numeric",
+      });
 
-    // Use startDate if available, fall back to dateTimeSubmitted
-    const startDateToUse = selectedDoc.startDate || selectedDoc.dateTimeSubmitted;
-    const calculatedWorkingDays = calculateWorkingDays(startDateToUse, now);
+      const docRef = ref(database, `documents/${selectedDoc.id}`);
+      await update(docRef, {
+        forwardedTo: "Secretary",
+        remarks: managerRemarks,
+        endorsementDate: formattedDate,
+      });
 
+      const trackingRef = ref(database, "tracking");
+      await push(trackingRef, {
+        id: selectedDoc.id,
+        awdReceivedDate: selectedDoc.awdReceivedDate,
+        awdReferenceNumber: selectedDoc.awdReferenceNumber,
+        subject: selectedDoc.subject,
+        dateOfDocument: selectedDoc.dateOfDocument,
+        deadline: selectedDoc.deadline,
+        fsisReferenceNumber: selectedDoc.fsisReferenceNumber,
+        originatingOffice: selectedDoc.originatingOffice,
+        forwardedBy: selectedDoc.forwardedTo,
+        forwardedTo: "Secretary",
+        remarks: managerRemarks,
+        status: selectedDoc.status,
+        workingDays: selectedDoc.workingDays,
+        assignedInspector: selectedDoc.assignedInspector,
+        dateTimeSubmitted: selectedDoc.dateTimeSubmitted,
+        startDate: selectedDoc.startDate,
+        endorsementDate: formattedDate,
+        ...(selectedDoc.endDate && { endDate: selectedDoc.endDate }),
+      });
 
-    // Update the original document
-    const docRef = ref(database, `documents/${selectedDoc.id}`);
-    await update(docRef, {
-      assignedInspector,
-      status: "Closed",
-      remarks: "For Release",
-      forwardedBy: selectedDoc.forwardedTo,
-      forwardedTo: "Admin",
-      endDate: formattedEndDate,
-      workingDays: calculatedWorkingDays.toString(),
-      startDate: startDateToUse // Keep the startDate in the document
-    });
-
-
-    // Create tracking record
-    const trackingRef = ref(database, "tracking");
-    await push(trackingRef, {
-      id: selectedDoc.id,
-      awdReceivedDate: selectedDoc.awdReceivedDate,
-      awdReferenceNumber: selectedDoc.awdReferenceNumber,
-      subject: selectedDoc.subject,
-      dateOfDocument: selectedDoc.dateOfDocument,
-      deadline: selectedDoc.deadline,
-      fsisReferenceNumber: selectedDoc.fsisReferenceNumber,
-      originatingOffice: selectedDoc.originatingOffice,
-      forwardedBy: selectedDoc.forwardedTo,
-      forwardedTo: "Admin",
-      remarks: "For Release",
-      status: "Closed",
-      workingDays: calculatedWorkingDays.toString(),
-      assignedInspector,
-      dateTimeSubmitted,
-      endDate: formattedEndDate,
-      startDate: startDateToUse // Include startDate in tracking
-    });
-    
-    // Store in mandays table
-    const mandaysRef = ref(database, "mandays");
-    await push(mandaysRef, {
-      awdReferenceNumber: selectedDoc.awdReferenceNumber,
-      originalWorkingDays: selectedDoc.workingDays,
-      actualWorkingDays: calculatedWorkingDays,
-      inspectorName: assignedInspector,
-      startDate: startDateToUse, 
-      endDate: formattedEndDate,
-      dateRecorded: now.toISOString(),
-    });
-
-    setSelectedDoc(null);
-    setAssignedInspector("");
-    alert("Document successfully forwarded for release!");
-  } catch (error) {
-    console.error("Error processing document:", error);
-  }
-};
-
-const handleReturnDocument = async () => {
-  if (!selectedDoc) return;
-
-  try {
-    const userUID = localStorage.getItem("authToken");
-    if (!userUID) {
-      alert("User not authenticated.");
-      return;
+      setSelectedDoc(null);
+      setManagerRemarks("");
+      alert("Document successfully forwarded for Manager's Endorsement!");
+    } catch (error) {
+      console.error("Error forwarding document for Manager's Endorsement:", error);
+      alert("Failed to forward document. Please try again.");
     }
-
-    let userName, userDivision;
-    const userRef = ref(database, `accounts/${userUID}`);
-    const userSnapshot = await get(userRef);
-    if (userSnapshot.exists()) {
-      const userData = userSnapshot.val();
-      userName = userData.name;
-      userDivision = userData.division;
-    } else {
-      alert("User details not found in the database.");
-      return;
-    }
-
-    const now = new Date();
-    const formattedReturnDate = now.toLocaleDateString("en-US", {
-      month: "2-digit",
-      day: "2-digit",
-      year: "numeric",
-    });
-
-    // Update the original document
-    const docRef = ref(database, `documents/${selectedDoc.id}`);
-    await update(docRef, {
-      status: "Returned",
-      remarks: "Returned to Originating Office",
-      forwardedBy: selectedDoc.forwardedTo,
-      forwardedTo: selectedDoc.originatingOffice,
-      returnDate: formattedReturnDate,
-    });
-
-    // Create a tracking record for the return
-    const trackingRef = ref(database, "tracking");
-    await push(trackingRef, {
-      id: selectedDoc.id,
-      awdReceivedDate: selectedDoc.awdReceivedDate,
-      awdReferenceNumber: selectedDoc.awdReferenceNumber,
-      subject: selectedDoc.subject,
-      dateOfDocument: selectedDoc.dateOfDocument,
-      deadline: selectedDoc.deadline,
-      fsisReferenceNumber: selectedDoc.fsisReferenceNumber,
-      originatingOffice: selectedDoc.originatingOffice,
-      forwardedBy: selectedDoc.forwardedTo,
-      forwardedTo: selectedDoc.originatingOffice,
-      remarks: "Returned to Originating Office",
-      status: "Returned",
-      returnDate: formattedReturnDate,
-      dateTimeSubmitted: selectedDoc.dateTimeSubmitted || new Date().toISOString(), // Add fallback for dateTimeSubmitted
-    });
-
-    setSelectedDoc(null);
-    alert("Document successfully returned!");
-  } catch (error) {
-    console.error("Error returning document:", error);
-  }
-};
-
-const handleManagersEndorsement = async () => {
-  if (!selectedDoc || !managerRemarks.trim()) return;
-
-  try {
-    const now = new Date();
-    const formattedDate = now.toLocaleDateString("en-US", {
-      month: "2-digit",
-      day: "2-digit",
-      year: "numeric",
-    });
-
-    // Update the original document - keep status and working days unchanged
-    const docRef = ref(database, `documents/${selectedDoc.id}`);
-    await update(docRef, {
-      forwardedTo: "Secretary",
-      remarks: managerRemarks,
-      // Status remains unchanged
-      // workingDays remains unchanged
-      endorsementDate: formattedDate,
-    });
-
-    // Create a tracking record with all document data
-    const trackingRef = ref(database, "tracking");
-    await push(trackingRef, {
-      id: selectedDoc.id,
-      awdReceivedDate: selectedDoc.awdReceivedDate,
-      awdReferenceNumber: selectedDoc.awdReferenceNumber,
-      subject: selectedDoc.subject,
-      dateOfDocument: selectedDoc.dateOfDocument,
-      deadline: selectedDoc.deadline,
-      fsisReferenceNumber: selectedDoc.fsisReferenceNumber,
-      originatingOffice: selectedDoc.originatingOffice,
-      forwardedBy: selectedDoc.forwardedTo, // Current division is forwarding
-      forwardedTo: "Secretary",
-      remarks: managerRemarks,
-      status: selectedDoc.status, // Keep original status
-      workingDays: selectedDoc.workingDays, // Keep original working days
-      assignedInspector: selectedDoc.assignedInspector,
-      dateTimeSubmitted: selectedDoc.dateTimeSubmitted,
-      startDate: selectedDoc.startDate,
-      endorsementDate: formattedDate,
-      // Include any other fields from the document
-      ...(selectedDoc.endDate && { endDate: selectedDoc.endDate }),
-    });
-
-    setSelectedDoc(null);
-    setManagerRemarks("");
-    alert("Document successfully forwarded for Manager's Endorsement!");
-  } catch (error) {
-    console.error("Error forwarding document for Manager's Endorsement:", error);
-    alert("Failed to forward document. Please try again.");
-  }
-};
+  };
 
   return (
     <ProtectedRoute allowedDivisions={['admin']}>

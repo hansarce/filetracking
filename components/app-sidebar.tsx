@@ -20,6 +20,7 @@ import {
   SidebarMenuItem,
   SidebarRail,
 } from "@/components/ui/sidebar"
+import Image from "next/image"
 
 const data = {
   navMain: [
@@ -94,15 +95,16 @@ const data = {
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   return (
     <Sidebar {...props}>
-     <SidebarHeader className="flex items-center pt-2 font-bold justify-center text-2xl gap-2">
-  {/* Add your logo image - adjust the src path as needed */}
-  <img 
-    src="/images/awdlogo.png" // Path to your logo in the public folder
-    alt="Airworthiness Logo"
-    className="w-20 h-20" // Adjust width and height as needed
-  />
-  AIRWORTHINESS
-</SidebarHeader>
+      <SidebarHeader className="flex items-center pt-2 font-bold justify-center text-2xl gap-2">
+        <Image 
+          src="/images/awdlogo.png" 
+          alt="Airworthiness Logo"
+          width={80}
+          height={80}
+          className="w-20 h-20" 
+        />
+        AIRWORTHINESS
+      </SidebarHeader>
       <SidebarContent className="gap-0">
         {data.navMain.map((item) => (
           <Collapsible

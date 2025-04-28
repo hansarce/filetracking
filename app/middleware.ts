@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { auth } from "@/lib/firebase/firebase"; // Import the auth instance directly
 
 const protectedRoutes = [
   "/admin",
@@ -56,7 +55,7 @@ export async function middleware(request: NextRequest) {
       }
 
       return NextResponse.next();
-    } catch (error) {
+    } catch {
       const response = NextResponse.redirect(new URL("/auth/login", request.url));
       response.cookies.delete("session");
       return response;

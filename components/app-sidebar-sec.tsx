@@ -1,7 +1,8 @@
 import * as React from "react"
 import { ChevronRight } from "lucide-react"
 import { NavUser } from "@/components/nav-user"
-import Link from "next/link";
+import Link from "next/link"
+import Image from "next/image"
 import {
   Collapsible,
   CollapsibleContent,
@@ -63,10 +64,12 @@ const data = {
 export function AppSidebarSecretary({ ...props }: React.ComponentProps<typeof Sidebar>) {
   return (
     <Sidebar {...props}>
-          <SidebarHeader className="flex items-center pt-2 font-bold justify-center text-2xl gap-2">
-        <img 
+      <SidebarHeader className="flex items-center pt-2 font-bold justify-center text-2xl gap-2">
+        <Image 
           src="/images/awdlogo.png" 
           alt="Airworthiness Logo"
+          width={80}
+          height={80}
           className="w-20 h-20" 
         />
         AIRWORTHINESS

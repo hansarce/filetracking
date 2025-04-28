@@ -3,14 +3,16 @@ import { getDatabase } from "firebase/database";
 import { getAuth } from "firebase/auth";
 
 const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-  databaseURL: "https://trackingmanagement-6e813-default-rtdb.asia-southeast1.firebasedatabase.app/",
+  apiKey: "AIzaSyA1hKkEKTW0kcVADfIql8tJ2jpDoYWwki8",
+  authDomain: "trackingmanagement-6e813.firebaseapp.com",
+  databaseURL: "https://trackingmanagement-6e813-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "trackingmanagement-6e813",
+  storageBucket: "trackingmanagement-6e813.firebasestorage.app",
+  messagingSenderId: "166871417428",
+  appId: "1:166871417428:web:bc17897430b3eca701a3c1",
+  measurementId: "G-E98P109RDX"
 };
+
 
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const auth = getAuth(app);
