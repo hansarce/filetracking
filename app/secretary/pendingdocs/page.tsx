@@ -280,7 +280,7 @@ export default function PendingDocuments() {
   // Handle forward to Inspector division
   const handleForwardToInspector = async () => {
     if (!selectedDocument || !selectedDivision || !returnRemarks.trim()) return;
-    
+
     try {
       const userUID = localStorage.getItem("authToken");
       if (!userUID) throw new Error("User not authenticated");
@@ -291,10 +291,10 @@ export default function PendingDocuments() {
         onValue(userRef, (snap) => {
           resolve(snap);
         }, { onlyOnce: true });
-      }) as DataSnapshot; // Type assertion added here
+      }) as DataSnapshot;
 
       if (!userSnapshot.exists()) throw new Error("User not found");
-      
+
       const userData = userSnapshot.val();
       const forwardedBy = `${userData.name} (${userData.division})`;
       const dateTimeSubmitted = getCurrentDateTime();
@@ -306,7 +306,7 @@ export default function PendingDocuments() {
         forwardedTo: selectedDivision,
         remarks: returnRemarks,
         status: "Open",
-        dateTimeSubmitted
+        dateTimeSubmitted,
       });
 
       // Create tracking record
@@ -321,7 +321,20 @@ export default function PendingDocuments() {
         actionTimestamp: Date.now(),
         awdReferenceNumber: selectedDocument.awdReferenceNumber,
         subject: selectedDocument.subject,
-        originatingOffice: selectedDocument.originatingOffice
+        originatingOffice: selectedDocument.originatingOffice,
+      });
+
+      // Insert into returninspector table
+      const returnInspectorRef = ref(database, "returninspector");
+      await push(returnInspectorRef, {
+        awdReferenceNumber: selectedDocument.awdReferenceNumber,
+        subject: selectedDocument.subject,
+        originatingOffice: selectedDocument.originatingOffice,
+        forwardedBy,
+        forwardedTo: selectedDivision,
+        remarks: returnRemarks,
+        dateTimeSubmitted,
+        division: selectedDivision,
       });
 
       // Reset form
@@ -329,7 +342,7 @@ export default function PendingDocuments() {
       setReturnRemarks("");
       setSelectedDivision("");
       setIsReturnMode(false);
-      
+
       alert(`Document forwarded to ${selectedDivision} successfully!`);
     } catch (error) {
       console.error("Error forwarding to inspector:", error);
@@ -371,7 +384,6 @@ export default function PendingDocuments() {
               <Separator orientation="vertical" className="mr-2 h-4" />
              
               
-            
               <Breadcrumb>
                 <BreadcrumbList>
                   <BreadcrumbItem className="hidden md:block">

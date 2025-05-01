@@ -30,6 +30,7 @@ export default function AssignTrack() {
   const router = useRouter();
   const [admin, setAdmin] = useState<{ name: string; role: string } | null>(null);
   const [awdReferenceNumber, setAwdReferenceNumber] = useState("");
+  const [isEditingAwd, setIsEditingAwd] = useState(false);
 
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged(async (user) => {
@@ -193,20 +194,32 @@ export default function AssignTrack() {
               <div className="mb-6">
                 <label className="block text-xl font-semibold pb-2">AWD Reference Number</label>
                 <div className="flex items-center gap-4">
-                  <div className="w-[500px] h-[50px] border rounded-md flex items-center px-4 bg-gray-100">
-                    <span className="text-lg font-medium">{awdReferenceNumber || "Generating..."}</span>
-                  </div>
-                  <Button 
-                    type="button" 
+                  {isEditingAwd ? (
+                    <Input
+                      name="awdReferenceNumber"
+                      type="text"
+                      className="w-[500px] h-[50px]"
+                      value={awdReferenceNumber}
+                      onChange={(e) => setAwdReferenceNumber(e.target.value)}
+                    />
+                  ) : (
+                    <div className="w-[500px] h-[50px] border rounded-md flex items-center px-4 bg-gray-100">
+                      <span className="text-lg font-medium">{awdReferenceNumber || "Generating..."}</span>
+                    </div>
+                  )}
+                  <Button
+                    type="button"
                     variant="outline"
-                    onClick={fetchAwdNumber}
+                    onClick={() => setIsEditingAwd(!isEditingAwd)}
                     className="h-[50px]"
                   >
-                    Refresh
+                    {isEditingAwd ? "Save" : "Edit"}
                   </Button>
                 </div>
                 <p className="text-sm text-muted-foreground mt-2">
-                  This will be automatically assigned to the document
+                  {isEditingAwd
+                    ? "You can now edit the AWD Reference Number."
+                    : "This will be automatically assigned to the document."}
                 </p>
               </div>
 
@@ -238,7 +251,7 @@ export default function AssignTrack() {
 
                 <div>
                   <label className="block text-lg font-semibold pb-2">Forwarded To</label>
-                   <Input name="forwardedtoname" type="text" className="w-[500px]  h-[50px]" onChange={handleChange} required />
+                   <Input name="forwardedtoname" type="text" className="w-[500px]  h-[50px]" onChange={handleChange}  />
                   <Select onValueChange={(value) => setFormData({ ...formData, forwardedTo: value })} required>
                     <SelectTrigger className="w-full h-12">
                       <SelectValue placeholder="Select division" />

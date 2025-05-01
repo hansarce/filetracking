@@ -28,6 +28,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectLabel, SelectItem, SelectGroup } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import ProtectedRoute from '@/components/protected-route';
 
 export type DocData = {
@@ -48,6 +49,7 @@ export type DocData = {
   dateTimeSubmitted: string;
   endDate?: string;
   startDate?: string;
+  division?: string;
 };
 
 export default function PendingDocs() {
@@ -55,6 +57,9 @@ export default function PendingDocs() {
   const [documents, setDocuments] = useState<DocData[]>([]);
   const [selectedDoc, setSelectedDoc] = useState<DocData | null>(null);
   const [assignedInspector, setAssignedInspector] = useState("");
+  const [remarks, setRemarks] = useState("");
+  const [division, setDivision] = useState("");
+  const [forwardedTo, setForwardedTo] = useState("");
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -86,7 +91,8 @@ export default function PendingDocs() {
                 assignedInspector: doc.assignedInspector || "",
                 dateTimeSubmitted: doc.dateTimeSubmitted || new Date().toISOString(),
                 endDate: doc.endDate || "",
-                startDate: doc.startDate || doc.dateTimeSubmitted || new Date().toISOString()
+                startDate: doc.startDate || doc.dateTimeSubmitted || new Date().toISOString(),
+                division: doc.division || ""
               });
             }
           });
@@ -126,7 +132,8 @@ export default function PendingDocs() {
       doc.subject.toLowerCase().includes(searchTerm) ||
       doc.awdReferenceNumber.toLowerCase().includes(searchTerm) ||
       (doc.forwardedBy && doc.forwardedBy.toLowerCase().includes(searchTerm)) ||
-      (doc.remarks && doc.remarks.toLowerCase().includes(searchTerm))
+      (doc.remarks && doc.remarks.toLowerCase().includes(searchTerm)) ||
+      (doc.division && doc.division.toLowerCase().includes(searchTerm))
     );
   });
 
@@ -164,7 +171,7 @@ export default function PendingDocs() {
   };
 
   const handleForwardForRelease = async () => {
-    if (!selectedDoc || !assignedInspector) return;
+    if (!selectedDoc || !assignedInspector || !forwardedTo) return;
 
     try {
       const userUID = localStorage.getItem("authToken");
@@ -203,12 +210,13 @@ export default function PendingDocs() {
       await update(docRef, {
         assignedInspector,
         status: "Closed",
-        remarks: "For Release",
+        remarks: remarks || "For Release",
         forwardedBy: selectedDoc.forwardedTo,
-        forwardedTo: "Admin",
+        forwardedTo,
         endDate: formattedEndDate,
         workingDays: calculatedWorkingDays.toString(),
         startDate: startDateToUse,
+        division: division || selectedDoc.division || "",
       });
 
       const trackingRef = ref(database, "tracking");
@@ -222,14 +230,15 @@ export default function PendingDocs() {
         fsisReferenceNumber: selectedDoc.fsisReferenceNumber,
         originatingOffice: selectedDoc.originatingOffice,
         forwardedBy: selectedDoc.forwardedTo,
-        forwardedTo: "Admin",
-        remarks: "For Release",
+        forwardedTo,
+        remarks: remarks || "For Release",
         status: "Closed",
         workingDays: calculatedWorkingDays.toString(),
         assignedInspector,
         dateTimeSubmitted,
         endDate: formattedEndDate,
         startDate: startDateToUse,
+        division: division || selectedDoc.division || "",
       });
 
       const mandaysRef = ref(database, "mandays");
@@ -241,11 +250,15 @@ export default function PendingDocs() {
         startDate: startDateToUse,
         endDate: formattedEndDate,
         dateRecorded: now.toISOString(),
+        division: division || selectedDoc.division || "",
       });
 
       setSelectedDoc(null);
       setAssignedInspector("");
-      alert("Document successfully forwarded for release!");
+      setRemarks("");
+      setDivision("");
+      setForwardedTo("");
+      alert("Document successfully forwarded!");
     } catch (error) {
       console.error("Error processing document:", error);
     }
@@ -298,6 +311,7 @@ export default function PendingDocs() {
                       <TableHead className="min-w-[200px]">Subject</TableHead>
                       <TableHead className="min-w-[150px]">Forwarded By</TableHead>
                       <TableHead className="min-w-[150px]">Forwarded To</TableHead>
+                      <TableHead className="min-w-[150px]">Division</TableHead>
                       <TableHead className="min-w-[150px]">Remarks</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -305,7 +319,11 @@ export default function PendingDocs() {
                     {currentItems.map((doc) => (
                       <TableRow
                         key={doc.id}
-                        onClick={() => setSelectedDoc(doc)}
+                        onClick={() => {
+                          setSelectedDoc(doc);
+                          setRemarks(doc.remarks || "");
+                          setDivision(doc.division || "");
+                        }}
                         className="cursor-pointer hover:bg-gray-100"
                       >
                         <TableCell className="whitespace-nowrap">{doc.awdReceivedDate}</TableCell>
@@ -313,6 +331,7 @@ export default function PendingDocs() {
                         <TableCell className="min-w-[200px]">{doc.subject}</TableCell>
                         <TableCell className="whitespace-nowrap">{doc.forwardedBy}</TableCell>
                         <TableCell className="whitespace-nowrap">{doc.forwardedTo}</TableCell>
+                        <TableCell className="whitespace-nowrap">{doc.division}</TableCell>
                         <TableCell className="whitespace-nowrap">{doc.remarks}</TableCell>
                       </TableRow>
                     ))}
@@ -397,12 +416,49 @@ export default function PendingDocs() {
                       <p className="font-semibold">Working Days:</p>
                       <p>{selectedDoc.workingDays}</p>
                     </div>
+                    <div>
+                      <p className="font-semibold">Division:</p>
+                      <p>{selectedDoc.division || "Not assigned"}</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4">
+                    <label className="block text-lg font-semibold mb-2">Forward To:</label>
+                    <Input
+                      type="text"
+                      value={forwardedTo}
+                      onChange={(e) => setForwardedTo(e.target.value)}
+                      placeholder="Enter recipient (person or division)"
+                      className="w-full"
+                    />
+                  </div>
+
+                  {/* Division Selection */}
+                  <div className="mt-4">
+                    <label className="block text-lg font-semibold mb-2">Division:</label>
+                    <Select 
+                      value={division || selectedDoc.division || ""}
+                      onValueChange={(value) => setDivision(value)}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Select division" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="GACID">GACID</SelectItem>
+                        <SelectItem value="CATCID">CATCID</SelectItem>
+                        <SelectItem value="EARD">EARD</SelectItem>
+                        <SelectItem value="MOCSU">MOCSU</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   {/* Assign Inspector */}
                   <div className="mt-4">
                     <label className="block text-lg font-semibold mb-2">Assign Inspector:</label>
-                    <Select onValueChange={(value) => setAssignedInspector(value)}>
+                    <Select 
+                      value={assignedInspector}
+                      onValueChange={(value) => setAssignedInspector(value)}
+                    >
                       <SelectTrigger className="w-full">
                         <SelectValue placeholder="Select an inspector" />
                       </SelectTrigger>
@@ -542,10 +598,21 @@ export default function PendingDocs() {
                     </Select>
                   </div>
 
+                  {/* Remarks Field */}
+                  <div className="mt-4">
+                    <label className="block text-lg font-semibold mb-2">Remarks:</label>
+                    <Textarea
+                      value={remarks}
+                      onChange={(e) => setRemarks(e.target.value)}
+                      placeholder="Enter remarks..."
+                      className="w-full"
+                    />
+                  </div>
+
                   <Button 
                     className="w-full mt-6" 
                     onClick={handleForwardForRelease} 
-                    disabled={!assignedInspector}
+                    
                   >
                     Forward for Release
                   </Button>

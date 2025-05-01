@@ -26,9 +26,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import ProtectedRoute from '@/components/protected-route';
+
 type MandayRecord = {
   id: string;
   awdReferenceNumber: string;
@@ -38,15 +39,20 @@ type MandayRecord = {
   startDate: string;
   endDate: string;
   dateRecorded: string;
+  division?: string;
 };
 
 type TimePeriod = "day" | "week" | "month" | "quarter" | "year";
 
-export default function MandaysAnalytics() {
+const DIVISIONS = ['GACID', 'CATCID', 'EARD', 'MOCSU'];
+const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8'];
+
+export default function DivisionAnalytics() {
   const [records, setRecords] = useState<MandayRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [timePeriod, setTimePeriod] = useState<TimePeriod>("month");
-  const [inspectorFilter, setInspectorFilter] = useState<string>("all");
+  const [divisionFilter, setDivisionFilter] = useState<string>("all");
+  const [statusData, setStatusData] = useState<{name: string, value: number}[]>([]);
 
   const fetchMandays = useCallback(async () => {
     try {
@@ -67,6 +73,7 @@ export default function MandaysAnalytics() {
             startDate: record.startDate || "N/A",
             endDate: record.endDate || "N/A",
             dateRecorded: record.dateRecorded || new Date().toISOString(),
+            division: record.division || "Unknown"
           });
         });
         setRecords(fetchedRecords);
@@ -84,31 +91,58 @@ export default function MandaysAnalytics() {
     fetchMandays();
   }, [fetchMandays]);
 
-  // Get unique inspectors for filter
-  const inspectors = Array.from(new Set(records.map(r => r.inspectorName))).sort();
-
-  // Calculate efficiency percentage (kept for display purposes)
+  // Calculate efficiency percentage
   const calculateEfficiency = (original: number, actual: number) => {
-    if (original <= 0) return 0;
+    if (original <= 0 || actual <= 0) return 0;
     return Math.min(Math.round((original / actual) * 100), 100);
   };
 
-  // Get simplified efficiency status
-  const getEfficiencyStatus = (original: number, actual: number) => {
-    if (actual < original) {
-      return { text: "Ahead of Time", color: "text-green-500" };
-    } else if (actual === original) {
-      return { text: "On Schedule", color: "text-blue-500" };
+  // Get status classification
+  const getEfficiencyStatus = useCallback((original: number, actual: number) => {
+    const percentage = (actual / original) * 100;
+    if (percentage < 90) {
+      return { text: "Ahead of Time", color: "text-green-500", category: "ahead" };
+    } else if (percentage <= 110) {
+      return { text: "On Track", color: "text-blue-500", category: "onTrack" };
     } else {
-      return { text: "Off Track", color: "text-red-500" };
+      return { text: "Overdue", color: "text-red-500", category: "overdue" };
     }
-  };
+  }, []);
+
+  // Calculate status distribution
+  const calculateStatusDistribution = useCallback((records: MandayRecord[]) => {
+    const statusCounts = {
+      ahead: 0,
+      onTrack: 0,
+      overdue: 0
+    };
+
+    records.forEach(record => {
+      const status = getEfficiencyStatus(record.originalWorkingDays, record.actualWorkingDays);
+      statusCounts[status.category as keyof typeof statusCounts]++;
+    });
+
+    return [
+      { name: "Ahead of Time", value: statusCounts.ahead },
+      { name: "On Track", value: statusCounts.onTrack },
+      { name: "Overdue", value: statusCounts.overdue }
+    ];
+  }, [getEfficiencyStatus]);
+
+  useEffect(() => {
+    const filteredRecords = divisionFilter === "all" 
+      ? records 
+      : records.filter(r => r.division === divisionFilter);
+
+    // Update status data whenever records or divisionFilter change
+    setStatusData(calculateStatusDistribution(filteredRecords));
+  }, [records, divisionFilter, calculateStatusDistribution]);
 
   // Filter and process data for charts
   const getProcessedData = () => {
-    const filteredRecords = inspectorFilter === "all" 
+    const filteredRecords = divisionFilter === "all" 
       ? records 
-      : records.filter(r => r.inspectorName === inspectorFilter);
+      : records.filter(r => r.division === divisionFilter);
 
     const dataMap = new Map<string, {
       period: string;
@@ -173,9 +207,9 @@ export default function MandaysAnalytics() {
   };
 
   const processedData = getProcessedData();
-  const filteredRecords = inspectorFilter === "all" 
+  const filteredRecords = divisionFilter === "all" 
     ? records 
-    : records.filter(r => r.inspectorName === inspectorFilter);
+    : records.filter(r => r.division === divisionFilter);
 
   // Calculate summary statistics
   const totalOriginalDays = filteredRecords.reduce((sum, record) => sum + record.originalWorkingDays, 0);
@@ -184,192 +218,230 @@ export default function MandaysAnalytics() {
   const efficiencyStatus = getEfficiencyStatus(totalOriginalDays, totalActualDays);
 
   return (
-       <ProtectedRoute allowedDivisions={['admin']}>
-    <SidebarProvider>
-      <div className="flex w-screen">
-        <AppSidebar />
-        <SidebarInset className="flex flex-1 flex-col">
-          <header className="flex h-16 items-center gap-2 border-b px-4 bg-white">
-            <SidebarTrigger className="-ml-1" />
-            <Separator orientation="vertical" className="mr-2 h-4" />
-            <Breadcrumb>
-              <BreadcrumbList>
-                <BreadcrumbItem className="hidden md:block">
-                  <BreadcrumbPage>Analytics</BreadcrumbPage>
-                </BreadcrumbItem>
-                <BreadcrumbSeparator className="hidden md:block" />
-                <BreadcrumbItem>
-                  <BreadcrumbPage>Mandays Efficiency</BreadcrumbPage>
-                </BreadcrumbItem>
-              </BreadcrumbList>
-            </Breadcrumb>
-          </header>
+    <ProtectedRoute allowedDivisions={['admin']}>
+      <SidebarProvider>
+        <div className="flex w-screen">
+          <AppSidebar />
+          <SidebarInset className="flex flex-1 flex-col">
+            <header className="flex h-16 items-center gap-2 border-b px-4 bg-white">
+              <SidebarTrigger className="-ml-1" />
+              <Separator orientation="vertical" className="mr-2 h-4" />
+              <Breadcrumb>
+                <BreadcrumbList>
+                  <BreadcrumbItem className="hidden md:block">
+                    <BreadcrumbPage>Analytics</BreadcrumbPage>
+                  </BreadcrumbItem>
+                  <BreadcrumbSeparator className="hidden md:block" />
+                  <BreadcrumbItem>
+                    <BreadcrumbPage>Division Performance</BreadcrumbPage>
+                  </BreadcrumbItem>
+                </BreadcrumbList>
+              </Breadcrumb>
+            </header>
 
-          <div className="p-6 space-y-6 h-[calc(100vh-64px)] overflow-y-auto">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-              <h1 className="text-3xl font-bold">Mandays Efficiency Analytics</h1>
-              <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
-                <Select value={timePeriod} onValueChange={(v) => setTimePeriod(v as TimePeriod)}>
-                  <SelectTrigger className="w-full md:w-[180px]">
-                    <SelectValue placeholder="Time Period" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="day">Daily</SelectItem>
-                    <SelectItem value="week">Weekly</SelectItem>
-                    <SelectItem value="month">Monthly</SelectItem>
-                    <SelectItem value="quarter">Quarterly</SelectItem>
-                    <SelectItem value="year">Yearly</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select value={inspectorFilter} onValueChange={setInspectorFilter}>
-                  <SelectTrigger className="w-full md:w-[200px]">
-                    <SelectValue placeholder="Filter by Inspector" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Inspectors</SelectItem>
-                    {inspectors.map(inspector => (
-                      <SelectItem key={inspector} value={inspector}>{inspector}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+            <div className="p-6 space-y-6 h-[calc(100vh-64px)] overflow-y-auto">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <h1 className="text-3xl font-bold">Division Performance Analytics</h1>
+                <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+                  <Select value={timePeriod} onValueChange={(v) => setTimePeriod(v as TimePeriod)}>
+                    <SelectTrigger className="w-full md:w-[180px]">
+                      <SelectValue placeholder="Time Period" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="day">Daily</SelectItem>
+                      <SelectItem value="week">Weekly</SelectItem>
+                      <SelectItem value="month">Monthly</SelectItem>
+                      <SelectItem value="quarter">Quarterly</SelectItem>
+                      <SelectItem value="year">Yearly</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={divisionFilter} onValueChange={setDivisionFilter}>
+                    <SelectTrigger className="w-full md:w-[200px]">
+                      <SelectValue placeholder="Filter by Division" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Divisions</SelectItem>
+                      {DIVISIONS.map(division => (
+                        <SelectItem key={division} value={division}>{division}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
+
+              {loading ? (
+                <div className="flex justify-center items-center h-64">
+                  <p>Loading division data...</p>
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <Card className="h-full">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-medium">Planned Days</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-3xl font-bold">{totalOriginalDays}</div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Total estimated working days
+                        </p>
+                      </CardContent>
+                    </Card>
+                    <Card className="h-full">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-medium">Actual Days</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-3xl font-bold">{totalActualDays}</div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Total days actually worked
+                        </p>
+                      </CardContent>
+                    </Card>
+                    <Card className="h-full">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-medium">Efficiency</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-3xl font-bold">{efficiency}%</div>
+                        <p className={`text-xs ${efficiencyStatus.color} mt-1 font-medium`}>
+                          {efficiencyStatus.text}
+                        </p>
+                      </CardContent>
+                    </Card>
+                    <Card className="h-full">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-medium">Total Documents</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-3xl font-bold">{filteredRecords.length}</div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Documents processed
+                        </p>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                    <Card className="h-[400px]">
+                      <CardHeader>
+                        <CardTitle>Division Performance</CardTitle>
+                      </CardHeader>
+                      <CardContent className="h-[calc(100%-56px)]">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart
+                            data={processedData}
+                            margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="period" />
+                            <YAxis />
+                            <Tooltip />
+                            <Legend />
+                            <Bar dataKey="originalDays" name="Planned Days" fill="#8884d8" />
+                            <Bar dataKey="actualDays" name="Actual Days" fill="#82ca9d" />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </CardContent>
+                    </Card>
+
+                    <Card className="h-[400px]">
+                      <CardHeader>
+                        <CardTitle>Efficiency Trend</CardTitle>
+                      </CardHeader>
+                      <CardContent className="h-[calc(100%-56px)]">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart
+                            data={processedData}
+                            margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="period" />
+                            <YAxis domain={[0, 100]} />
+                            <Tooltip />
+                            <Legend />
+                            <Bar dataKey="efficiency" name="Efficiency %" fill="#ffc658" />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </CardContent>
+                    </Card>
+
+                    <Card className="h-[400px]">
+                      <CardHeader>
+                        <CardTitle>Status Distribution</CardTitle>
+                      </CardHeader>
+                      <CardContent className="h-[calc(100%-56px)]">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie
+                              data={statusData}
+                              cx="50%"
+                              cy="50%"
+                              labelLine={false}
+                              outerRadius={80}
+                              fill="#8884d8"
+                              dataKey="value"
+                              label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                            >
+                              {statusData.map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                              ))}
+                            </Pie>
+                            <Tooltip />
+                            <Legend />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Detailed Records</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="overflow-x-auto max-h-[500px]">
+                        <Table>
+                          <TableHeader className="sticky top-0 bg-background">
+                            <TableRow>
+                              <TableHead className="min-w-[120px]">AWD No.</TableHead>
+                              <TableHead className="min-w-[180px]">Division</TableHead>
+                              <TableHead className="min-w-[100px]">Planned</TableHead>
+                              <TableHead className="min-w-[100px]">Actual</TableHead>
+                              <TableHead className="min-w-[120px]">Start Date</TableHead>
+                              <TableHead className="min-w-[120px]">End Date</TableHead>
+                              <TableHead className="min-w-[100px]">Efficiency</TableHead>
+                              <TableHead className="min-w-[150px]">Status</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {filteredRecords.map((record) => {
+                              const recordEfficiency = calculateEfficiency(record.originalWorkingDays, record.actualWorkingDays);
+                              const recordStatus = getEfficiencyStatus(record.originalWorkingDays, record.actualWorkingDays);
+                              return (
+                                <TableRow key={record.id}>
+                                  <TableCell className="font-medium">{record.awdReferenceNumber}</TableCell>
+                                  <TableCell>{record.inspectorName}</TableCell>
+                                  <TableCell>{record.originalWorkingDays}</TableCell>
+                                  <TableCell>{record.actualWorkingDays}</TableCell>
+                                  <TableCell>{new Date(record.startDate).toLocaleDateString()}</TableCell>
+                                  <TableCell>{new Date(record.endDate).toLocaleDateString()}</TableCell>
+                                  <TableCell>{recordEfficiency}%</TableCell>
+                                  <TableCell className={recordStatus.color}>{recordStatus.text}</TableCell>
+                                </TableRow>
+                              );
+                            })}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </>
+              )}
             </div>
-
-            {loading ? (
-              <div className="flex justify-center items-center h-64">
-                <p>Loading mandays data...</p>
-              </div>
-            ) : (
-              <>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <Card className="h-full">
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm font-medium">Planned Days</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-3xl font-bold">{totalOriginalDays}</div>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Total estimated working days
-                      </p>
-                    </CardContent>
-                  </Card>
-                  <Card className="h-full">
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm font-medium">Actual Days</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-3xl font-bold">{totalActualDays}</div>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Total days actually worked
-                      </p>
-                    </CardContent>
-                  </Card>
-                  <Card className="h-full">
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm font-medium">Status</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-3xl font-bold">{efficiency}%</div>
-                      <p className={`text-xs ${efficiencyStatus.color} mt-1 font-medium`}>
-                        {efficiencyStatus.text}
-                      </p>
-                    </CardContent>
-                  </Card>
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  <Card className="h-[400px]">
-                    <CardHeader>
-                      <CardTitle>Mandays Comparison</CardTitle>
-                    </CardHeader>
-                    <CardContent className="h-[calc(100%-56px)]">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart
-                          data={processedData}
-                          margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
-                        >
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="period" />
-                          <YAxis />
-                          <Tooltip />
-                          <Legend />
-                          <Bar dataKey="originalDays" name="Planned Days" fill="#8884d8" />
-                          <Bar dataKey="actualDays" name="Actual Days" fill="#82ca9d" />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </CardContent>
-                  </Card>
-
-                  <Card className="h-[400px]">
-                    <CardHeader>
-                      <CardTitle>Efficiency Trend</CardTitle>
-                    </CardHeader>
-                    <CardContent className="h-[calc(100%-56px)]">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart
-                          data={processedData}
-                          margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
-                        >
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="period" />
-                          <YAxis domain={[0, 100]} />
-                          <Tooltip />
-                          <Legend />
-                          <Bar dataKey="efficiency" name="Efficiency %" fill="#ffc658" />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </CardContent>
-                  </Card>
-                </div>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Detailed Records</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="overflow-x-auto max-h-[500px]">
-                      <Table>
-                        <TableHeader className="sticky top-0 bg-background">
-                          <TableRow>
-                            <TableHead className="min-w-[120px]">AWD No.</TableHead>
-                            <TableHead className="min-w-[180px]">Inspector</TableHead>
-                            <TableHead className="min-w-[100px]">Planned</TableHead>
-                            <TableHead className="min-w-[100px]">Actual</TableHead>
-                            <TableHead className="min-w-[120px]">Start Date</TableHead>
-                            <TableHead className="min-w-[120px]">End Date</TableHead>
-                            <TableHead className="min-w-[100px]">Efficiency</TableHead>
-                            <TableHead className="min-w-[150px]">Status</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {filteredRecords.map((record) => {
-                            const recordEfficiency = calculateEfficiency(record.originalWorkingDays, record.actualWorkingDays);
-                            const recordStatus = getEfficiencyStatus(record.originalWorkingDays, record.actualWorkingDays);
-                            return (
-                              <TableRow key={record.id}>
-                                <TableCell className="font-medium">{record.awdReferenceNumber}</TableCell>
-                                <TableCell>{record.inspectorName}</TableCell>
-                                <TableCell>{record.originalWorkingDays}</TableCell>
-                                <TableCell>{record.actualWorkingDays}</TableCell>
-                                <TableCell>{new Date(record.startDate).toLocaleDateString()}</TableCell>
-                                <TableCell>{new Date(record.endDate).toLocaleDateString()}</TableCell>
-                                <TableCell>{recordEfficiency}%</TableCell>
-                                <TableCell className={recordStatus.color}>{recordStatus.text}</TableCell>
-                              </TableRow>
-                            );
-                          })}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  </CardContent>
-                </Card>
-              </>
-            )}
-          </div>
-        </SidebarInset>
-      </div>
-    </SidebarProvider>
-
+          </SidebarInset>
+        </div>
+      </SidebarProvider>
     </ProtectedRoute>
   );
 }
