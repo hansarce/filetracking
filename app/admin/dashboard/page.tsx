@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { database } from "@/lib/firebase/firebase";
 import { ref, get, onValue } from "firebase/database";
-import { format, subDays } from "date-fns";
+import { format, subDays, isWithinInterval } from "date-fns";
 import { AppSidebar } from "@/components/app-sidebar";
 import {
   SidebarInset,
@@ -26,7 +26,6 @@ import {
   CardDescription,
 } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, PieChart, Pie, Cell } from "recharts";
 import ProtectedRoute from '@/components/protected-route';
 
@@ -40,7 +39,6 @@ type MandayRecord = {
   endDate: string;
   dateRecorded: string;
   status?: string;
-  division?: string;
 };
 
 type TrackRecord = {
@@ -54,14 +52,19 @@ type TrackRecord = {
   status: string;
 };
 
+type ReturnedDocument = {
+  id: string;
+  dateTimeSubmitted: string;
+} & Record<string, unknown>;
+
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
-const DIVISIONS = ['GACID', 'CATCID', 'EARD', 'MOCSU'];
 
 export default function DivisionDashboard() {
   const [records, setRecords] = useState<MandayRecord[]>([]);
   const [tracks, setTracks] = useState<TrackRecord[]>([]);
+  const [returnedDocs, setReturnedDocs] = useState<ReturnedDocument[]>([]);
+  const [returnedToAwd, setReturnedToAwd] = useState<ReturnedDocument[]>([]);
   const [loading, setLoading] = useState(true);
-  const [divisionFilter, setDivisionFilter] = useState<string>("all");
   const [weeklyData, setWeeklyData] = useState<{closed: number; ongoing: number}>({closed: 0, ongoing: 0});
 
   const fetchData = useCallback(async () => {
@@ -69,10 +72,14 @@ export default function DivisionDashboard() {
       setLoading(true);
       const mandaysRef = ref(database, "mandays");
       const tracksRef = ref(database, "documents");
+      const returnedRef = ref(database, "returninspector");
+      const returnedToAwdRef = ref(database, "returntoawd");
       
-      const [mandaysSnapshot, tracksSnapshot] = await Promise.all([
+      const [mandaysSnapshot, tracksSnapshot, returnedSnapshot, returnedToAwdSnapshot] = await Promise.all([
         get(mandaysRef),
-        get(tracksRef)
+        get(tracksRef),
+        get(returnedRef),
+        get(returnedToAwdRef)
       ]);
       
       if (mandaysSnapshot.exists()) {
@@ -88,8 +95,7 @@ export default function DivisionDashboard() {
             startDate: record.startDate || "N/A",
             endDate: record.endDate || "N/A",
             dateRecorded: record.dateRecorded || new Date().toISOString(),
-            status: record.status || "open",
-            division: record.division || "Unknown"
+            status: record.status || "open"
           });
         });
         setRecords(fetchedRecords);
@@ -102,7 +108,6 @@ export default function DivisionDashboard() {
         tracksSnapshot.forEach((childSnapshot) => {
           const track = childSnapshot.val();
           
-          // Flexible date parsing
           let submittedDate = "";
           if (track.dateTimeSubmitted) {
             if (track.dateTimeSubmitted.includes(',')) {
@@ -137,11 +142,39 @@ export default function DivisionDashboard() {
           });
         });
         setTracks(fetchedTracks);
-        
-        // Calculate weekly document status
         updateWeeklyDocumentStatus(fetchedTracks);
       } else {
         setTracks([]);
+      }
+
+      if (returnedSnapshot.exists()) {
+        const fetchedReturned: ReturnedDocument[] = [];
+        returnedSnapshot.forEach((childSnapshot) => {
+          const doc = childSnapshot.val();
+          fetchedReturned.push({
+            id: childSnapshot.key || "",
+            dateTimeSubmitted: doc.dateTimeSubmitted || new Date().toISOString(),
+            ...doc
+          });
+        });
+        setReturnedDocs(fetchedReturned);
+      } else {
+        setReturnedDocs([]);
+      }
+
+      if (returnedToAwdSnapshot.exists()) {
+        const fetchedReturnedToAwd: ReturnedDocument[] = [];
+        returnedToAwdSnapshot.forEach((childSnapshot) => {
+          const doc = childSnapshot.val();
+          fetchedReturnedToAwd.push({
+            id: childSnapshot.key || "",
+            dateTimeSubmitted: doc.dateTimeSubmitted || new Date().toISOString(),
+            ...doc
+          });
+        });
+        setReturnedToAwd(fetchedReturnedToAwd);
+      } else {
+        setReturnedToAwd([]);
       }
     } catch (error) {
       console.error("Error fetching data:", error);
@@ -169,9 +202,12 @@ export default function DivisionDashboard() {
   useEffect(() => {
     fetchData();
 
-    // Set up real-time listener for tracks
+    // Set up real-time listeners
     const tracksRef = ref(database, "documents");
-    const unsubscribe = onValue(tracksRef, (snapshot) => {
+    const returnedRef = ref(database, "returninspector");
+    const returnedToAwdRef = ref(database, "returntoawd");
+    
+    const unsubscribeTracks = onValue(tracksRef, (snapshot) => {
       if (snapshot.exists()) {
         const updatedTracks: TrackRecord[] = [];
         snapshot.forEach((childSnapshot) => {
@@ -218,7 +254,45 @@ export default function DivisionDashboard() {
       }
     });
 
-    return () => unsubscribe();
+    const unsubscribeReturned = onValue(returnedRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const updatedReturned: ReturnedDocument[] = [];
+        snapshot.forEach((childSnapshot) => {
+          const doc = childSnapshot.val();
+          updatedReturned.push({
+            id: childSnapshot.key || "",
+            dateTimeSubmitted: doc.dateTimeSubmitted || new Date().toISOString(),
+            ...doc
+          });
+        });
+        setReturnedDocs(updatedReturned);
+      } else {
+        setReturnedDocs([]);
+      }
+    });
+
+    const unsubscribeReturnedToAwd = onValue(returnedToAwdRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const updatedReturnedToAwd: ReturnedDocument[] = [];
+        snapshot.forEach((childSnapshot) => {
+          const doc = childSnapshot.val();
+          updatedReturnedToAwd.push({
+            id: childSnapshot.key || "",
+            dateTimeSubmitted: doc.dateTimeSubmitted || new Date().toISOString(),
+            ...doc
+          });
+        });
+        setReturnedToAwd(updatedReturnedToAwd);
+      } else {
+        setReturnedToAwd([]);
+      }
+    });
+
+    return () => {
+      unsubscribeTracks();
+      unsubscribeReturned();
+      unsubscribeReturnedToAwd();
+    };
   }, [fetchData]);
 
   // Calculate efficiency percentage
@@ -227,36 +301,13 @@ export default function DivisionDashboard() {
     return Math.min(Math.round((original / actual) * 100), 100);
   };
 
-  // Filter records based on division selection
-  const filteredRecords = divisionFilter === "all" 
-    ? records 
-    : records.filter(r => r.division === divisionFilter);
-
-  // Calculate annual comparison as area chart data
-  const getAnnualComparison = () => {
-    const now = new Date();
-    const yearRecords = filteredRecords.filter(record => {
-      const recordDate = new Date(record.dateRecorded);
-      return recordDate.getFullYear() === now.getFullYear();
-    });
-
-    return Array.from({ length: 12 }, (_, i) => {
-      const monthRecords = yearRecords.filter(record => {
-        const recordDate = new Date(record.dateRecorded);
-        return recordDate.getMonth() === i;
-      });
-
-      const original = monthRecords.reduce((sum, r) => sum + r.originalWorkingDays, 0);
-      const actual = monthRecords.reduce((sum, r) => sum + r.actualWorkingDays, 0);
-      const efficiency = calculateEfficiency(original, actual);
-
-      return {
-        name: new Date(now.getFullYear(), i, 1).toLocaleString('default', { month: 'short' }),
-        planned: original,
-        actual: actual,
-        efficiency
-      };
-    });
+  // Get weekly returned documents count
+  const getWeeklyReturnedCount = (docs: ReturnedDocument[]) => {
+    const oneWeekAgo = subDays(new Date(), 7);
+    return docs.filter(doc => {
+      const docDate = new Date(doc.dateTimeSubmitted);
+      return isWithinInterval(docDate, { start: oneWeekAgo, end: new Date() });
+    }).length;
   };
 
   // Get document status data for weekly view
@@ -265,7 +316,7 @@ export default function DivisionDashboard() {
     { name: 'Closed', value: weeklyData.closed }
   ];
 
-  // Get daily tracks count with more flexible date comparison
+  // Get daily tracks count
   const getDailyTracks = () => {
     const todayString = format(new Date(), 'MM/dd/yyyy');
     
@@ -296,7 +347,23 @@ export default function DivisionDashboard() {
   };
 
   // Calculate annual comparison data
-  const annualComparisonData = getAnnualComparison();
+  const annualComparisonData = Array.from({ length: 12 }, (_, i) => {
+    const monthRecords = records.filter(record => {
+      const recordDate = new Date(record.dateRecorded);
+      return recordDate.getMonth() === i;
+    });
+
+    const original = monthRecords.reduce((sum, r) => sum + r.originalWorkingDays, 0);
+    const actual = monthRecords.reduce((sum, r) => sum + r.actualWorkingDays, 0);
+    const efficiency = calculateEfficiency(original, actual);
+
+    return {
+      name: new Date(new Date().getFullYear(), i, 1).toLocaleString('default', { month: 'short' }),
+      planned: original,
+      actual: actual,
+      efficiency
+    };
+  });
 
   return (
     <ProtectedRoute allowedDivisions={['admin']}>
@@ -321,22 +388,7 @@ export default function DivisionDashboard() {
             </header>
             
             <div className="p-6 space-y-6 h-[calc(100vh-64px)] overflow-y-auto">
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                <h1 className="text-3xl font-bold">Division Performance Dashboard</h1>
-                <div className="w-full md:w-[200px]">
-                  <Select value={divisionFilter} onValueChange={setDivisionFilter}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Filter by Division" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Divisions</SelectItem>
-                      {DIVISIONS.map(division => (
-                        <SelectItem key={division} value={division}>{division}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
+              <h1 className="text-3xl font-bold">Dashboard</h1>
 
               {loading ? (
                 <div className="flex justify-center items-center h-64">
@@ -379,6 +431,44 @@ export default function DivisionDashboard() {
                         </div>
                         <Progress 
                           value={Math.min((getDailyClosedDocuments() / 20) * 100, 100)} 
+                          className="mt-4 h-2" 
+                        />
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Returned to Inspector</CardTitle>
+                        <CardDescription>Documents returned to inspector</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold">
+                          {returnedDocs.length}
+                        </div>
+                        <div className="text-sm text-muted-foreground mt-2">
+                          {getWeeklyReturnedCount(returnedDocs)} this week
+                        </div>
+                        <Progress 
+                          value={Math.min((returnedDocs.length / 20) * 100, 100)} 
+                          className="mt-4 h-2" 
+                        />
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Returned to AWD</CardTitle>
+                        <CardDescription>Documents returned to AWD department</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold">
+                          {returnedToAwd.length}
+                        </div>
+                        <div className="text-sm text-muted-foreground mt-2">
+                          {getWeeklyReturnedCount(returnedToAwd)} this week
+                        </div>
+                        <Progress 
+                          value={Math.min((returnedToAwd.length / 20) * 100, 100)} 
                           className="mt-4 h-2" 
                         />
                       </CardContent>

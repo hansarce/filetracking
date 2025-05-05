@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { database } from "@/lib/firebase/firebase";
-import { ref, onValue, query, orderByChild, equalTo, update } from "firebase/database";
+import { ref, onValue, query, orderByChild, equalTo, update, push, get } from "firebase/database";
 import { AppSidebar } from "@/components/app-sidebar";
 import {
   SidebarInset,
@@ -30,6 +30,9 @@ import ProtectedRoute from '@/components/protected-route';
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { DataSnapshot } from "firebase/database";
 
 export type DocData = {
   id: string;
@@ -52,6 +55,14 @@ export type DocData = {
   workingDays: string;
 };
 
+const FORWARD_TO_OPTIONS = [
+  "CATCID Admin",
+  "GACID Admin",
+  "EARD Admin",
+  "MOCSU Admin",
+  "Secretary"
+];
+
 export default function ClosedDocuments() {
   const [documents, setDocuments] = useState<DocData[]>([]);
   const [filteredDocuments, setFilteredDocuments] = useState<DocData[]>([]);
@@ -61,7 +72,30 @@ export default function ClosedDocuments() {
   const [receiverName, setReceiverName] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [isUpdating, setIsUpdating] = useState(false);
+  const [isReturning, setIsReturning] = useState(false);
+  const [remarks, setRemarks] = useState("");
+  const [forwardedTo, setForwardedTo] = useState("");
   const router = useRouter();
+
+  const formatDateTime = (dateString: string) => {
+    if (!dateString) return "";
+    
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return dateString;
+      
+      return date.toLocaleString('en-US', {
+        month: '2-digit',
+        day: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+      });
+    } catch {
+      return dateString;
+    }
+  };
 
   useEffect(() => {
     const docsRef = ref(database, "documents");
@@ -74,8 +108,9 @@ export default function ClosedDocuments() {
           snapshot.forEach((childSnapshot) => {
             const doc = childSnapshot.val();
             fetchedDocs.push({ 
-              id: childSnapshot.key,
-              ...doc
+              id: childSnapshot.key || "",
+              ...doc,
+              dateTimeSubmitted: formatDateTime(doc.dateTimeSubmitted)
             });
           });
           fetchedDocs.sort((a, b) => 
@@ -113,8 +148,7 @@ export default function ClosedDocuments() {
     router.push(`/admin/Documents/subjectinformation`);
   };
 
-  const toggleRowSelection = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const toggleRowSelection = (id: string) => {
     const newSelection = new Set(selectedRows);
     if (newSelection.has(id)) {
       newSelection.delete(id);
@@ -145,7 +179,7 @@ export default function ClosedDocuments() {
     try {
       setIsUpdating(true);
       const updates: Record<string, string> = {};
-      const timestamp = new Date().toLocaleString();
+      const timestamp = formatDateTime(new Date().toISOString());
       
       Array.from(selectedRows).forEach(docId => {
         updates[`documents/${docId}/receivedBy`] = `${receiverName.trim()} (${timestamp})`;
@@ -161,13 +195,77 @@ export default function ClosedDocuments() {
     }
   };
 
+  const returnDocuments = async () => {
+    if (selectedRows.size === 0 || !remarks.trim() || !forwardedTo) return;
+    
+    try {
+      setIsReturning(true);
+      const updates: Record<string, unknown> = {};
+      const timestamp = formatDateTime(new Date().toISOString());
+      
+      const selectedDocs = documents.filter(doc => selectedRows.has(doc.id));
+      
+      for (const doc of selectedDocs) {
+        // Create return record
+        const returnData = {
+          ...doc,
+          dateTimeSubmitted: timestamp,
+          remarks,
+          forwardedTo,
+          status: "Open",
+          returnedBy: doc.receivedBy || "Unknown"
+        };
+        
+        // Add to returntoawd table
+        await push(ref(database, "returntoawd"), returnData);
+        
+        // Add to tracking table
+        const trackingData = {
+          ...returnData,
+          dateTimeSubmitted: timestamp,
+          status: "Open"
+        };
+        await push(ref(database, "tracking"), trackingData);
+        
+        // Update document
+        updates[`documents/${doc.id}/status`] = "Open";
+        updates[`documents/${doc.id}/remarks`] = remarks;
+        updates[`documents/${doc.id}/forwardedTo`] = forwardedTo;
+        updates[`documents/${doc.id}/endDate`] = null;
+        updates[`documents/${doc.id}/dateTimeSubmitted`] = timestamp;
+        
+        // Remove from mandays table if exists
+        const mandaysQuery = query(
+          ref(database, "mandays"),
+          orderByChild("awdReferenceNumber"),
+          equalTo(doc.awdReferenceNumber)
+        );
+        
+        const mandaysSnapshot = await get(mandaysQuery);
+        if (mandaysSnapshot.exists()) {
+          mandaysSnapshot.forEach((child: DataSnapshot) => {
+            updates[`mandays/${child.key}`] = null;
+          });
+        }
+      }
+      
+      await update(ref(database), updates);
+      
+      setRemarks("");
+      setForwardedTo("");
+      setSelectedRows(new Set());
+    } catch (error) {
+      console.error("Error returning documents:", error);
+    } finally {
+      setIsReturning(false);
+    }
+  };
+
   const copySelectedToClipboard = () => {
     if (selectedRows.size === 0) return;
 
-    // Get all selected documents (including those not on current page)
     const selectedDocs = documents.filter(doc => selectedRows.has(doc.id));
     
-    // Create tab-separated rows without headers
     const rows = selectedDocs.map(doc => [
       doc.awdReferenceNumber,
       doc.originatingOffice,
@@ -177,7 +275,6 @@ export default function ClosedDocuments() {
 
     const csvContent = rows.join("\n");
 
-    // Copy to clipboard
     navigator.clipboard.writeText(csvContent)
       .then(() => alert(`${selectedRows.size} documents copied to clipboard!`))
       .catch(err => console.error("Failed to copy:", err));
@@ -248,36 +345,71 @@ export default function ClosedDocuments() {
               </div>
 
               {selectedRows.size > 0 && (
-                <div className="flex gap-2 items-center mb-4 p-4 bg-gray-50 rounded-lg">
-                  <Input
-                    placeholder="Enter receiver name"
-                    value={receiverName}
-                    onChange={(e) => setReceiverName(e.target.value)}
-                    className="w-64"
-                  />
-                  <Button 
-                    onClick={updateReceivedBy}
-                    disabled={!receiverName.trim() || isUpdating}
-                  >
-                    {isUpdating ? "Updating..." : "Mark as Received"}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={copySelectedToClipboard}
-                    disabled={isUpdating}
-                  >
-                    Copy Selected
-                  </Button>
-                  <Button 
-                    variant="ghost" 
-                    onClick={() => setSelectedRows(new Set())}
-                    disabled={isUpdating}
-                  >
-                    Clear Selection
-                  </Button>
-                  <span className="text-sm text-gray-600 ml-2">
-                    {selectedRows.size} document(s) selected
-                  </span>
+                <div className="flex flex-col gap-4 mb-4 p-4 bg-gray-50 rounded-lg">
+                  <div className="flex gap-2 items-center">
+                    <Input
+                      placeholder="Enter receiver name"
+                      value={receiverName}
+                      onChange={(e) => setReceiverName(e.target.value)}
+                      className="w-64"
+                    />
+                    <Button 
+                      onClick={updateReceivedBy}
+                      disabled={!receiverName.trim() || isUpdating}
+                    >
+                      {isUpdating ? "Updating..." : "Mark as Received"}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={copySelectedToClipboard}
+                      disabled={isUpdating || isReturning}
+                    >
+                      Copy Selected
+                    </Button>
+                    <Button 
+                      variant="ghost" 
+                      onClick={() => setSelectedRows(new Set())}
+                      disabled={isUpdating || isReturning}
+                    >
+                      Clear Selection
+                    </Button>
+                    <span className="text-sm text-gray-600 ml-2">
+                      {selectedRows.size} document(s) selected
+                    </span>
+                  </div>
+
+                  <div className="border-t pt-4">
+                    <h3 className="font-medium mb-2">Return Documents</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <Select value={forwardedTo} onValueChange={setForwardedTo}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select forwarded to" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {FORWARD_TO_OPTIONS.map(option => (
+                              <SelectItem key={option} value={option}>{option}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="md:col-span-2">
+                        <Textarea
+                          placeholder="Enter remarks"
+                          value={remarks}
+                          onChange={(e) => setRemarks(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                    <div className="flex justify-end mt-2">
+                      <Button 
+                        onClick={returnDocuments}
+                        disabled={!remarks.trim() || !forwardedTo || isReturning}
+                      >
+                        {isReturning ? "Returning..." : "Return Selected Documents"}
+                      </Button>
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -288,10 +420,7 @@ export default function ClosedDocuments() {
                       <TableHead>
                         <Checkbox
                           checked={allRowsSelected}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleAllRowsSelection();
-                          }}
+                          onClick={() => toggleAllRowsSelection()}
                         />
                       </TableHead>
                       <TableHead>AWD No.</TableHead>
@@ -308,7 +437,7 @@ export default function ClosedDocuments() {
                           onClick={() => handleRowClick(doc)}
                           className="cursor-pointer hover:bg-gray-100"
                         >
-                          <TableCell onClick={(e) => toggleRowSelection(doc.id, e)}>
+                          <TableCell onClick={() => toggleRowSelection(doc.id)}>
                             <Checkbox 
                               checked={selectedRows.has(doc.id)}
                               onClick={(e) => e.stopPropagation()}
@@ -331,7 +460,6 @@ export default function ClosedDocuments() {
                 </Table>
               </div>
 
-              {/* Pagination */}
               <div className="flex justify-between items-center mt-4">
                 <div className="text-sm text-gray-600">
                   Showing {indexOfFirstItem + 1}-{Math.min(indexOfLastItem, filteredDocuments.length)} of {filteredDocuments.length} documents

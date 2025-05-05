@@ -44,7 +44,6 @@ export type DocData = {
   forwardedTo: string;
   remarks: string;
   status: string;
-  workingDays: string;
   assignedInspector: string;
   dateTimeSubmitted: string;
   endDate?: string;
@@ -87,7 +86,6 @@ export default function PendingDocs() {
                 forwardedTo: doc.forwardedTo || "",
                 remarks: doc.remarks || "",
                 status: doc.status || "Open",
-                workingDays: doc.workingDays || "",
                 assignedInspector: doc.assignedInspector || "",
                 dateTimeSubmitted: doc.dateTimeSubmitted || new Date().toISOString(),
                 endDate: doc.endDate || "",
@@ -144,32 +142,6 @@ export default function PendingDocs() {
 
   const paginate = (pageNumber: number) => setCurrentPage(pageNumber);
 
-  const calculateWorkingDays = (startDate: string, endDate: Date): number => {
-    try {
-      const start = new Date(startDate);
-      const end = new Date(endDate);
-      
-      start.setHours(0, 0, 0, 0);
-      end.setHours(0, 0, 0, 0);
-      
-      let count = 0;
-      const current = new Date(start);
-      
-      while (current <= end) {
-        const dayOfWeek = current.getDay();
-        if (dayOfWeek !== 0 && dayOfWeek !== 6) {
-          count++;
-        }
-        current.setDate(current.getDate() + 1);
-      }
-      
-      return count;
-    } catch (error) {
-      console.error("Error calculating working days:", error);
-      return 0;
-    }
-  };
-
   const handleForwardForRelease = async () => {
     if (!selectedDoc || !assignedInspector || !forwardedTo) return;
 
@@ -204,7 +176,6 @@ export default function PendingDocs() {
       });
 
       const startDateToUse = selectedDoc.startDate || selectedDoc.dateTimeSubmitted;
-      const calculatedWorkingDays = calculateWorkingDays(startDateToUse, now);
 
       const docRef = ref(database, `documents/${selectedDoc.id}`);
       await update(docRef, {
@@ -214,7 +185,6 @@ export default function PendingDocs() {
         forwardedBy: selectedDoc.forwardedTo,
         forwardedTo,
         endDate: formattedEndDate,
-        workingDays: calculatedWorkingDays.toString(),
         startDate: startDateToUse,
         division: division || selectedDoc.division || "",
       });
@@ -233,7 +203,6 @@ export default function PendingDocs() {
         forwardedTo,
         remarks: remarks || "For Release",
         status: "Closed",
-        workingDays: calculatedWorkingDays.toString(),
         assignedInspector,
         dateTimeSubmitted,
         endDate: formattedEndDate,
@@ -244,8 +213,6 @@ export default function PendingDocs() {
       const mandaysRef = ref(database, "mandays");
       await push(mandaysRef, {
         awdReferenceNumber: selectedDoc.awdReferenceNumber,
-        originalWorkingDays: selectedDoc.workingDays,
-        actualWorkingDays: calculatedWorkingDays,
         inspectorName: assignedInspector,
         startDate: startDateToUse,
         endDate: formattedEndDate,
@@ -411,10 +378,6 @@ export default function PendingDocs() {
                     <div>
                       <p className="font-semibold">Deadline:</p>
                       <p>{selectedDoc.deadline}</p>
-                    </div>
-                    <div>
-                      <p className="font-semibold">Working Days:</p>
-                      <p>{selectedDoc.workingDays}</p>
                     </div>
                     <div>
                       <p className="font-semibold">Division:</p>

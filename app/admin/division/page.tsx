@@ -56,6 +56,7 @@ export default function DivisionDocs() {
   const [selectedDoc, setSelectedDoc] = useState<DocData | null>(null);
   const [assignedInspector, setAssignedInspector] = useState("");
   const [managerRemarks, setManagerRemarks] = useState("");
+  const [selectedDivision, setSelectedDivision] = useState("");
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -128,31 +129,32 @@ export default function DivisionDocs() {
   const totalPages = Math.ceil(filteredDocuments.length / itemsPerPage);
 
   const paginate = (pageNumber: number) => setCurrentPage(pageNumber);
-const calculateWorkingDays = (startDate: string, endDate: Date): number => {
-  try {
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    
-    start.setHours(0, 0, 0, 0);
-    end.setHours(0, 0, 0, 0);
-    
-    let count = 0;
-    const current = new Date(start);
-    
-    while (current <= end) {
-      const dayOfWeek = current.getDay();
-      if (dayOfWeek !== 0 && dayOfWeek !== 6) { // Skip weekends
-        count++;
+
+  const calculateWorkingDays = (startDate: string, endDate: Date): number => {
+    try {
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      
+      start.setHours(0, 0, 0, 0);
+      end.setHours(0, 0, 0, 0);
+      
+      let count = 0;
+      const current = new Date(start);
+      
+      while (current <= end) {
+        const dayOfWeek = current.getDay();
+        if (dayOfWeek !== 0 && dayOfWeek !== 6) { // Skip weekends
+          count++;
+        }
+        current.setDate(current.getDate() + 1);
       }
-      current.setDate(current.getDate() + 1);
+      
+      return count;
+    } catch (error) {
+      console.error("Error calculating working days:", error);
+      return 0;
     }
-    
-    return count;
-  } catch (error) {
-    console.error("Error calculating working days:", error);
-    return 0;
-  }
-};
+  };
 
   const handleForwardForRelease = async () => {
     if (!selectedDoc || !assignedInspector) return;
@@ -194,12 +196,13 @@ const calculateWorkingDays = (startDate: string, endDate: Date): number => {
       await update(docRef, {
         assignedInspector,
         status: "Closed",
-        remarks: "For Release",
+        remarks: managerRemarks || "For Release", // Use manager remarks if available
         forwardedBy: selectedDoc.forwardedTo,
         forwardedTo: "Admin",
         endDate: formattedEndDate,
         workingDays: calculatedWorkingDays.toString(),
         startDate: startDateToUse,
+        ...(selectedDivision && { division: selectedDivision }), // Include division if selected
       });
 
       const trackingRef = ref(database, "tracking");
@@ -214,13 +217,14 @@ const calculateWorkingDays = (startDate: string, endDate: Date): number => {
         originatingOffice: selectedDoc.originatingOffice,
         forwardedBy: selectedDoc.forwardedTo,
         forwardedTo: "Admin",
-        remarks: "For Release",
+        remarks: managerRemarks || "For Release",
         status: "Closed",
         workingDays: calculatedWorkingDays.toString(),
         assignedInspector,
         dateTimeSubmitted,
         endDate: formattedEndDate,
         startDate: startDateToUse,
+        ...(selectedDivision && { division: selectedDivision }),
       });
 
       const mandaysRef = ref(database, "mandays");
@@ -232,71 +236,16 @@ const calculateWorkingDays = (startDate: string, endDate: Date): number => {
         startDate: startDateToUse,
         endDate: formattedEndDate,
         dateRecorded: now.toISOString(),
+        ...(selectedDivision && { division: selectedDivision }),
       });
 
       setSelectedDoc(null);
       setAssignedInspector("");
+      setManagerRemarks("");
+      setSelectedDivision("");
       alert("Document successfully forwarded for release!");
     } catch (error) {
       console.error("Error processing document:", error);
-    }
-  };
-
-  const handleReturnDocument = async () => {
-    if (!selectedDoc) return;
-
-    try {
-      const userUID = localStorage.getItem("authToken");
-      if (!userUID) {
-        alert("User not authenticated.");
-        return;
-      }
-
-      const userRef = ref(database, `accounts/${userUID}`);
-      const userSnapshot = await get(userRef);
-      if (!userSnapshot.exists()) {
-        alert("User details not found in the database.");
-        return;
-      }
-
-      const now = new Date();
-      const formattedReturnDate = now.toLocaleDateString("en-US", {
-        month: "2-digit",
-        day: "2-digit",
-        year: "numeric",
-      });
-
-      const docRef = ref(database, `documents/${selectedDoc.id}`);
-      await update(docRef, {
-        status: "Returned",
-        remarks: "Returned to Originating Office",
-        forwardedBy: selectedDoc.forwardedTo,
-        forwardedTo: selectedDoc.originatingOffice,
-        returnDate: formattedReturnDate,
-      });
-
-      const trackingRef = ref(database, "tracking");
-      await push(trackingRef, {
-        id: selectedDoc.id,
-        awdReceivedDate: selectedDoc.awdReceivedDate,
-        awdReferenceNumber: selectedDoc.awdReferenceNumber,
-        subject: selectedDoc.subject,
-        dateOfDocument: selectedDoc.dateOfDocument,
-        deadline: selectedDoc.deadline,
-        fsisReferenceNumber: selectedDoc.fsisReferenceNumber,
-        originatingOffice: selectedDoc.originatingOffice,
-        forwardedBy: selectedDoc.forwardedTo,
-        forwardedTo: selectedDoc.originatingOffice,
-        remarks: "Returned to Originating Office",
-        status: "Returned",
-        returnDate: formattedReturnDate,
-        dateTimeSubmitted: selectedDoc.dateTimeSubmitted || new Date().toISOString(),
-      });
-
-      setSelectedDoc(null);
-      alert("Document successfully returned!");
-    } catch (error) {
-      console.error("Error returning document:", error);
     }
   };
 
@@ -494,16 +443,40 @@ const calculateWorkingDays = (startDate: string, endDate: Date): number => {
                   </div>
                 </div>
 
-              
-               {/* Assign Inspector */}
+                {/* Remarks Section (Only required for Forward to Manager) */}
                 <div className="mt-4">
-                  <label className="block text-lg font-semibold mb-2">Assign Inspector:</label>
-                  <Select onValueChange={(value) => setAssignedInspector(value)}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Select an inspector" />
-                    </SelectTrigger>
-                    <SelectContent className="max-h-[400px] overflow-y-auto">
-                      {/* Group A */}
+                  <label className="block text-lg font-semibold mb-2">Remarks:</label>
+                  <Input
+                    type="text"
+                    placeholder="Enter remarks..."
+                    value={managerRemarks}
+                    onChange={(e) => setManagerRemarks(e.target.value)}
+                    className="w-full border p-2 rounded"
+                  />
+                </div>
+
+                {/* Forward to Manager Button (Only requires remarks) */}
+                <Button 
+                  className="w-full mt-6" 
+                  onClick={handleManagersEndorsement} 
+                  disabled={!managerRemarks.trim()}
+                >
+                  Forward to Manager
+                </Button>
+
+                {/* Optional Fields Section (For Forward for Release) */}
+                <div className="mt-6">
+                  <h3 className="text-lg font-semibold mb-4">Additional Information for Release</h3>
+                  
+                  {/* Assign Inspector (Required for Forward for Release) */}
+                  <div className="mt-4">
+                    <label className="block text-md font-semibold mb-2">Assign Inspector:</label>
+                    <Select onValueChange={(value) => setAssignedInspector(value)}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Select an inspector" />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-[400px] overflow-y-auto">
+                       {/* Group A */}
                       <SelectGroup>
                         <SelectLabel>A</SelectLabel>
                         <SelectItem value="ALCANTARA, JENNY T.">ALCANTARA, JENNY T.</SelectItem>
@@ -634,42 +607,38 @@ const calculateWorkingDays = (startDate: string, endDate: Date): number => {
                         <SelectLabel>V</SelectLabel>
                         <SelectItem value="VILLAVIEJA, ADOLFO JR.">VILLAVIEJA, ADOLFO JR.</SelectItem>
                       </SelectGroup>
-               
-                    </SelectContent>
-                  </Select>
-                </div>
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-                <Button 
-                  className="w-full mt-6" 
-                  onClick={handleForwardForRelease} 
-                  disabled={!assignedInspector}
-                >
-                  Forward for Release
-                </Button>
-                <Button 
-                  className="w-full mt-6" 
-                  onClick={handleReturnDocument} 
-                  disabled={!selectedDoc}
-                >
-                  Return Document
-                </Button>
-                <div className="mt-4">
-                  <label className="block text-lg font-semibold mb-2">Remarks:</label>
-                  <Input
-                    type="text"
-                    placeholder="Enter remarks..."
-                    value={managerRemarks}
-                    onChange={(e) => setManagerRemarks(e.target.value)}
-                    className="w-full border p-2 rounded"
-                  />
+                  {/* Data Division Selection (Optional) */}
+                  <div className="mt-4">
+                    <label className="block text-md font-semibold mb-2">Data Division (Optional):</label>
+                    <Select onValueChange={(value) => setSelectedDivision(value)}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Select Division" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          <SelectLabel>Division</SelectLabel>
+                          <SelectItem value="EARD">EARD</SelectItem>
+                          <SelectItem value="MOCSU">MOCSU</SelectItem>
+                          <SelectItem value="GACID">GACID</SelectItem>
+                          <SelectItem value="CATCID">CATCID</SelectItem>
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Forward for Release Button (Only requires assignedInspector) */}
+                  <Button 
+                    className="w-full mt-6" 
+                    onClick={handleForwardForRelease} 
+                    disabled={!assignedInspector}
+                  >
+                    Forward for Release
+                  </Button>
                 </div>
-                <Button 
-                  className="w-full mt-6" 
-                  onClick={handleManagersEndorsement} 
-                  disabled={!managerRemarks.trim()}
-                >
-                  Forward to Manager
-                </Button>
               </div>
             )}
           </div>
