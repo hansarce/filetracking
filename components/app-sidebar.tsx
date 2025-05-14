@@ -31,10 +31,7 @@ const data = {
           title: "Dashboard",
           url: "/admin/dashboard",
         },
-        {
-          title: "Division",
-          url: "/admin/division",
-        },
+        
         {
           title: "Mandays",
           url: "/admin/mandays",
@@ -58,20 +55,12 @@ const data = {
       title: "Incoming Documents",
       items: [
         {
-          title: "Assign Track",
+          title: "Incoming Documents",
           url: "/admin/Documents/assigntrack",
         },
         {
-          title: "Ongoing Documents",
-          url: "/admin/Documents/ongoingdocs",
-        },
-        {
-          title: "Sent Documents",
-          url: "/admin/Documents/sentdocs",
-        },
-        {
-          title: "Pending Documents",
-          url: "/admin/outgoingdocuments/pendingdocs",
+          title: "Division",
+          url: "/admin/division",
         },
       ],
     },
@@ -79,14 +68,16 @@ const data = {
       title: "Outgoing Documents",
       items: [
         {
-          title: "Closed Documents",
+          title: "Outgoing Documents",
           url: "/admin/outgoingdocuments/closeddocs",
         },
-        
         {
-          title: "Returned Documents",
-          url: "/admin/outgoingdocuments/returneddocs",
+          title: "Pending Documents",
+          url: "/admin/outgoingdocuments/pendingdocs",
         },
+        
+        
+        
       ],
     },
   ],
